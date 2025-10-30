@@ -100,9 +100,6 @@ cython_debug/
 # VSCode settings
 .vscode/
 
-# Figures
-figures/
-
 # Tests
 tests/
 
@@ -110,5 +107,5 @@ tests/
 temp.py
 temp.ipynb
 
-# Log Files
+# Log files
 *.log
