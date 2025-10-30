@@ -32,7 +32,7 @@ with resources.path("oscana", "") as _path:
     CONFIG_PATH = Path(_path).parent.parent / "res" / "configs"
 
 
-_STACK_LEVEL: int = 3
+_STACK_LEVEL: int = 2
 
 
 # ========================== [ Warning Formatting ] ========================== #
@@ -83,7 +83,7 @@ _is_root_logger_initialised: bool = False
 
 
 def init_root_logger(
-    logs_dir: str = "./",
+    logs_dir: str | Path = "./",
     verbosity: str = "WARNING",
     config_file: str | None = None,
 ) -> None:
@@ -92,10 +92,10 @@ def init_root_logger(
 
     Parameters
     ----------
-    logs_dir : str
+    logs_dir : str | Path
         The directory where the logs should be stored.
 
-    config_file : str, optional
+    config_file : str | None
         The path to the logging configuration file. If `None`, the default
         configuration file is used (recommended).
 
@@ -119,13 +119,15 @@ def init_root_logger(
         logging.getLogger("Root").warning("Root logger already initialised!")
         return
 
+    # TODO: Maybe make it so that it automatically creates the logs directory.
+
     # Note: Some duplicated code from `oscana.utils._apply_wsl_prefix` is used
     #       here to avoid circular imports.
     #
     #       It pained me to do this, but I do not know a better way. If you know
     #       a better way, please let me know! Thanks!
 
-    def _apply_wsl_prefix(dir_: str) -> Path:
+    def _apply_wsl_prefix(dir_: str | Path) -> Path:
         if platform.system() == "Linux" and dir_.startswith("C:"):
             dir_split = dir_.split("://")
             return Path(
