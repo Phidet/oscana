@@ -26,9 +26,10 @@ __all__ = [
     # Modifiers
     "energy_axs_scale",
     "spec_fig_cleanup",
+    "add_experiment_tag",
     # Plotting
     "plot_hist",
-    # "plot_hist_from_heights",
+    "plot_hist_from_heights",
     # Templates
     "plot_energy_resolution",
     "plot_fd_event_image",
@@ -36,7 +37,7 @@ __all__ = [
     "get_bin_centers",
 ]
 
-from typing import Generator, Literal, Any, TYPE_CHECKING
+from typing import Generator, Literal, Any, TYPE_CHECKING, TypeAlias
 
 from contextlib import contextmanager
 
@@ -49,8 +50,8 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import matplotlib.scale as scl
 from matplotlib import patches
+from matplotlib import offsetbox
 
-from .logger import _error
 from .themes import _load_settings
 from .utils import minos_numbers
 from .images import create_fd_split_image
@@ -116,6 +117,16 @@ DEFAULT_X_AXIS_SEGMENTS: list[tuple[float, float, float]] = [
     (30, 50, 0.075),
 ]
 DEFAULT_X_AXIS_TICKS: list[float] = [0, 5, 10, 15, 20, 30, 50]
+
+ExperimentType: TypeAlias = Literal["MINOS", "MINOS+", "NOvA"]
+PlotAccessType: TypeAlias = Literal[
+    "Internal",  # Private
+    "Preliminary",  # Public Preliminary
+    "Simulation",  # Public Preliminary
+    "Data",  # Public Preliminary
+    "Final",  # Public Final
+    "Unknown",  # ???
+]
 
 # =========================== [ Helper Functions ] =========================== #
 
@@ -211,7 +222,7 @@ def _axs_inv_transform(
         The array transformed back to the original axis.
     """
     array = np.asarray(array)
-    original_axis = np.zeros_like(array)
+    original_axis = np.zeros_like(array, dtype=float)
 
     offset = 0
 
@@ -244,7 +255,7 @@ def plotting_context(theme_name: str = "slate") -> Generator[None, None, None]:
     settings = _load_settings(theme_name=theme_name.lower())
 
     # Keep the original rcParameters so we can reset them later...
-    original_params = {setting: mpl.rcParams[setting] for setting in settings}
+    original_params = {k: mpl.rcParams[k] for k in settings}
 
     # Change the rcPrameters to our custom settings...
     mpl.rcParams.update(settings)
@@ -371,10 +382,20 @@ def spectrum_layout(
 
 
 def fd_uv_views_layout(
+    title: str = "Far Detector",
+    use_real_distances: bool = False,
     **figure_kwargs,
 ) -> tuple[Figure, tuple[Axes, ...]]:
     """\
     Create a custom layout for the far detector U-Z and V-Z plane views.
+
+    Parameters
+    ----------
+    title : str
+        Title of the plot. Defaults to "Far Detector".
+
+    use_real_distances : bool
+        Whether to use real distances for the axes labels. Defaults to `False`.
 
     Returns
     -------
@@ -427,11 +448,26 @@ def fd_uv_views_layout(
         )
     )
 
-    axs[0].text(0.07, 0.87, "U-Z Plane".upper(), transform=axs[0].transAxes)
-    axs[3].text(0.07, 0.87, "V-Z Plane".upper(), transform=axs[3].transAxes)
+    plane_label_x_pos = 0.07
+    plane_label_y_pos = 0.87
 
-    x_label = "Plane Number".upper()
-    y_label = "Strip Number".upper()
+    axs[0].text(
+        plane_label_x_pos,
+        plane_label_y_pos,
+        "UZ Plane",
+        fontdict=dict(fontsize=mpl.rcParams["axes.titlesize"]),
+        transform=axs[0].transAxes,
+    )
+    axs[3].text(
+        plane_label_x_pos,
+        plane_label_y_pos,
+        "VZ Plane",
+        fontdict=dict(fontsize=mpl.rcParams["axes.titlesize"]),
+        transform=axs[3].transAxes,
+    )
+
+    x_label = "Z (m)" if use_real_distances else "Plane Number"
+    y_label = "T (m)" if use_real_distances else "Strip Number"
 
     axs[0].tick_params(which="both", right=False)
     axs[0].set_ylabel(y_label)
@@ -440,6 +476,7 @@ def fd_uv_views_layout(
     axs[1].set_yticklabels([])
     axs[1].set_xticklabels([])
     axs[2].tick_params(which="both", left=False, labelleft=False)
+    axs[2].set_title(title, loc="right", wrap=True)
     axs[3].tick_params(which="both", right=False)
     axs[3].set_ylabel(y_label)
     axs[4].set_yticks([])
@@ -453,6 +490,8 @@ def fd_uv_views_layout(
         fontsize=axs[0].xaxis.label.get_fontsize(),
         transform=axs[1].xaxis.label.get_transform(),
     )
+
+    fig.subplots_adjust(bottom=0.08)
 
     return fig, axs
 
@@ -566,17 +605,171 @@ def spec_fig_cleanup(
     _logger.debug("Cleaned up the spectrum plot figure.")
 
 
+def add_experiment_tag(
+    ax: Axes,
+    rel_x_pos: float = 0.0,
+    rel_y_pos: float = 1.21,
+    experiment: ExperimentType = "MINOS",
+    access: PlotAccessType = "Unknown",
+    extra_tags: list[str] | None = None,
+    flatten_tag: bool = False,
+    **_options: Any,
+) -> None:
+    """\
+    Add an experiment tag to the plot.
+
+    Parameters
+    ----------
+    ax : Axes
+        Matplotlib `Axes` object to add the tag to.
+
+    rel_x_pos : float
+        Relative x position of the tag in the axes coordinates. Defaults to 0.0.
+    
+    rel_y_pos : float
+        Relative y position of the tag in the axes coordinates. Defaults to 
+        1.21.
+
+    experiment : ExperimentType
+        Name of the experiment. Defaults to "MINOS".
+    
+    access : PlotAccessType
+        Access type of the plot. Defaults to "Unknown".
+
+    extra_tags : list[str] | None
+        Extra tags to add to the plot. Defaults to `None`.
+
+    flatten_tag : bool
+        Whether to flatten the extra tags into a single line. Defaults to 
+        `False`.
+
+    **_options : Any
+        Optional keyword arguments to customize the tag appearance.
+
+    Notes
+    -----
+    Optional keyword arguments include:
+        - `loc`: Location of the tag in the axes coordinates.
+        - `h_padding`: Horizontal padding between the components.
+        - `h_align`: Horizontal alignment of the components.
+        - `h_seperation`: Horizontal separation between the components.
+        - `v_padding`: Vertical padding between the components.
+        - `v_align`: Vertical alignment of the components.
+        - `v_seperation`: Vertical separation between the components.
+        - `padding`: Padding around the tag.
+        - `in_padding`: Padding inside the tag.
+        - `enable_frame`: Whether to enable the frame around the tag.
+    """
+    title_props = {"fontsize": mpl.rcParams["font.size"]}
+    extra_props = {"fontsize": mpl.rcParams["legend.fontsize"]}
+
+    components = [
+        [
+            offsetbox.TextArea(
+                r"$\bf{" + experiment + "}$", textprops=title_props
+            ),
+            offsetbox.TextArea(
+                (
+                    ""
+                    if (access == "Unknown") or (access == "Final")
+                    else r"$\it{" + access + "}$"
+                ),
+                textprops=title_props,
+            ),
+        ]
+    ]
+
+    if extra_tags:
+        if flatten_tag:
+            components[0].extend(
+                [
+                    offsetbox.TextArea(" | ", textprops=title_props),
+                    offsetbox.TextArea(
+                        " \u2022 ".join(extra_tags), textprops=extra_props
+                    ),
+                ]
+            )
+        else:
+            components.append(
+                [
+                    offsetbox.TextArea(
+                        "\n".join(extra_tags), textprops=extra_props
+                    ),
+                ]
+            )
+
+    h_components: list[offsetbox.HPacker] = []
+
+    for j in range(len(components)):
+        if components[j]:
+            h_components.append(
+                offsetbox.HPacker(
+                    children=(
+                        components[j]
+                    ),  # pyright: ignore[reportArgumentType]
+                    pad=_options.get("h_padding", 0.0),
+                    align=_options.get("h_align", "left"),
+                    sep=_options.get("h_seperation", 2.0),
+                )
+            )
+
+    container = offsetbox.AnchoredOffsetbox(
+        loc=_options.get("loc", "upper left"),
+        child=offsetbox.VPacker(
+            children=h_components,  # pyright: ignore[reportArgumentType]
+            pad=_options.get("v_padding", 0.0),
+            align=_options.get("v_align", "left"),
+            sep=_options.get("v_seperation", 2.0),
+        ),
+        pad=_options.get("padding", 0.0),
+        borderpad=_options.get("in_padding", 0.0),
+        frameon=_options.get("enable_frame", False),
+        bbox_to_anchor=(rel_x_pos, rel_y_pos),
+        bbox_transform=ax.transAxes,
+    )
+
+    ax.add_artist(container)
+
+
 # =============================== [ Plotting ] =============================== #
 
 
 def plot_hist(
     data: npt.NDArray,
-    bins: int | npt.NDArray,
+    bins: int | npt.NDArray | list[float],
     # Optional Figure & Axes
     fig: Figure | None = None,
     ax: Axes | None = None,
     **hist_kwargs,
 ) -> tuple[Figure, Axes, dict[str, float | npt.NDArray]]:
+    """\
+    Plot a histogram of the data.
+
+    Parameters
+    ----------
+    data : npt.NDArray
+        The data.
+
+    bins : int | npt.NDArray | list[float]
+        The number of bins or the bin edges.
+
+    fig : Figure | None
+        Optional: Matplotlib `Figure` object. If `None`, a new figure will be
+        created.
+    
+    ax : Axes | None
+        Optional: Matplotlib `Axes` object. If `None`, a new axes will be
+        created.
+    
+    hist_kwargs : dict[str, Any]
+        Optional: Additional keyword arguments to pass to the `hist` function.
+
+    Returns
+    -------
+    tuple[Figure, Axes, dict[str, float | npt.NDArray]]
+        Matplotlib `Figure` object, Matplotlib `Axes` object, and a dictionary
+        containing the histogram and statistics information.
+    """
     if (fig is None) or (ax is None):
         fig, (ax, *_) = grid_layout()
 
@@ -606,8 +799,72 @@ def plot_hist(
     return fig, ax, info
 
 
-def plot_hist_from_heights() -> ...:
-    pass
+def plot_hist_from_heights(
+    bin_heights: npt.NDArray,
+    bins: npt.NDArray | list[float],
+    # Optional Figure & Axes
+    fig: Figure | None = None,
+    ax: Axes | None = None,
+    **hist_kwargs: Any,
+) -> tuple[Figure, Axes, dict[str, float | npt.NDArray]]:
+    """\
+    Plot a histogram from the bin heights and edges.
+
+    Parameters
+    ----------
+    bin_heights : npt.NDArray
+        The heights of the bins.
+
+    bins : npt.NDArray | list[float]
+        The bin edges.
+
+    fig : Figure | None
+        Optional: Matplotlib `Figure` object. If `None`, a new figure will be
+        created.
+
+    ax : Axes | None
+        Optional: Matplotlib `Axes` object. If `None`, a new axes will be
+        created.
+
+    **hist_kwargs : Any
+        Optional: Additional keyword arguments to pass to the `hist` function.
+
+    Returns
+    -------
+    tuple[Figure, Axes, dict[str, float | npt.NDArray]]
+        Matplotlib `Figure` object, Matplotlib `Axes` object, and a dictionary
+        containing the histogram and statistics information.
+
+    Notes
+    -----
+    The info dictionary do not contain the statistics of the data, as it is not
+    provided. It only contains the histogram information.
+    """
+
+    # bin_centers = get_bin_centers(bin_edges=bins)
+
+    if (fig is None) or (ax is None):
+        fig, (ax, *_) = grid_layout()
+
+    # (1) Plot the histogram.
+
+    bin_heights, bin_edges, _ = ax.hist(
+        bins[:-1],
+        bins=bins,  # pyright: ignore reportArgumentType
+        weights=bin_heights,
+        **hist_kwargs,
+    )
+
+    # (2) Calculate histogram and stats info.
+
+    info: dict[str, float | npt.NDArray] = {
+        # Histogram
+        "BinHeights": np.asarray(bin_heights, dtype=float),
+        "BinEdges": np.asarray(bin_edges, dtype=float),
+        "BinCenters": get_bin_centers(bin_edges=bin_edges),
+    }
+
+    return fig, ax, info
 
 
 # ============================== [ Templates  ] ============================== #
@@ -669,14 +926,14 @@ def plot_energy_resolution(
 
     energy_axs_scale(ax)
 
-    ax.set_title(algorithm_name.upper())
-    ax.set_ylabel("Events".upper())
+    ax.set_title(algorithm_name)
+    ax.set_ylabel("Events")
     ax.legend()
 
     ax = axs[1]
 
-    ax.set_xlabel("Neutrino Energy, ".upper() + r"$E_\nu$ [GeV]")
-    ax.set_ylabel("Ratio - 1".upper())
+    ax.set_xlabel("Neutrino Energy, " + r"$E_\nu$ [GeV]")
+    ax.set_ylabel("Ratio - 1")
 
     mc_bin_heights = np.asarray(mc_bin_heights)
     reco_bin_heights = np.asarray(reco_bin_heights)
@@ -706,8 +963,8 @@ def plot_energy_resolution(
         + r"$\sigma=$"
         + f"{std_resolution:6.4f}"
     )
-    ax.set_xlabel(r"$E_\nu$" + " Resolution".upper())
-    ax.set_ylabel("Frequency".upper())
+    ax.set_xlabel(r"$E_\nu$" + " Resolution")
+    ax.set_ylabel("Frequency")
 
     spec_fig_cleanup(fig, *axs)
 
@@ -721,8 +978,9 @@ def plot_fd_event_image(
     stp_strip: npt.NDArray,
     stp_plane: npt.NDArray,
     fill: npt.NDArray | None = None,
-    toggle_log_scale: bool = False,
-    cbar_label: str = "",
+    *,
+    use_log_scale: bool = False,
+    cbar_label: str = "???",
     **figure_kwargs,
 ) -> tuple[Figure, tuple[Axes, ...]]:
     """\
@@ -746,11 +1004,11 @@ def plot_fd_event_image(
         Array to fill the image. Defaults to `None`. If `None`, the image will 
         be filled with "1"s.
 
-    toggle_log_scale : bool
+    use_log_scale : bool
         Whether to use a log scale for the pixel images. Defaults to `False`.
 
     cbar_label : str
-        Label for the colour bar. Defaults to "".
+        Label for the colour bar. Defaults to "???".
 
     Returns
     -------
@@ -783,7 +1041,7 @@ def plot_fd_event_image(
         fill=[fill] if fill is not None else None,
     )
 
-    if toggle_log_scale:
+    if use_log_scale:
         u_south_image = np.log1p(u_south_image)
         u_north_image = np.log1p(u_north_image)
         v_south_image = np.log1p(v_south_image)
@@ -815,9 +1073,11 @@ def plot_fd_event_image(
     )
 
     image = axs[0].imshow(u_south_image, extent=west_extent, **imshow_kwargs)
+    axs[1].set_facecolor(plt.get_cmap(mpl.rcParams["image.cmap"])(0.0))
     axs[2].imshow(u_north_image, extent=east_extent, **imshow_kwargs)
 
     axs[3].imshow(v_south_image, extent=west_extent, **imshow_kwargs)
+    axs[4].set_facecolor(plt.get_cmap(mpl.rcParams["image.cmap"])(0.0))
     axs[5].imshow(v_north_image, extent=east_extent, **imshow_kwargs)
 
     # (4) Add the colourbar.
@@ -825,9 +1085,7 @@ def plot_fd_event_image(
     if fill is not None:
         colour_bar = fig.colorbar(image, ax=axs, pad=0.02, aspect=30)
         colour_bar.set_label(
-            "log(1 + " * toggle_log_scale
-            + cbar_label.upper()
-            + ")" * toggle_log_scale
+            "log(1 + " * use_log_scale + cbar_label + ")" * use_log_scale
         )
 
     return fig, axs
