@@ -17,7 +17,7 @@ from __future__ import annotations
 
 __all__ = ["Theme", "themes"]
 
-from typing import Any
+from typing import Any, Final
 
 import logging
 
@@ -33,7 +33,12 @@ logger = logging.getLogger("Plot")
 
 # ============================== [ Constants  ] ============================== #
 
-DEFAULT_FIG_SIZE: tuple[float, float] = (7.5, 6.5)  # in
+DEFAULT_FIG_SIZE: Final[tuple[float, float]] = (9.0, 6.0)  # inches
+
+MINIMUM_TEXT_SIZE: Final[int] = 15
+
+CMU_BRIGHT_SEMIBOLD: Final[str] = "cmunbsr.ttf"
+CMU_TYPEWRITER_TEXT_REGULAR: Final[str] = "cmuntt.ttf"
 
 # =========================== [ Theme Dataclass  ] =========================== #
 
@@ -73,7 +78,6 @@ class Theme:
 
     # Text
 
-    title_size: int
     text_font: str
     text_size: int
 
@@ -113,14 +117,23 @@ def _load_font(font_name: str) -> str:
     # Default font
     font = "sans-serif"
 
+    # Check avalible fonts.
+    available_fonts: set = {f.name for f in fm.fontManager.ttflist}
+
+    if font_name in available_fonts:
+
+        return font_name
+
     # Check if the custom font exists.
     font_as_path = RESOURCES_PATH / "fonts" / font_name
 
-    if not font_as_path.exists():
+    if font_name.endswith(".ttf") and (not font_as_path.exists()):
         logger.warning(
             f"Font '{font_name}' not found. Defaulting to '{font.capitalize()}'"
             " font."
         )
+
+        return font
 
     font_object = fm.FontProperties(fname=font_as_path)  # type: ignore
     font = font_object.get_name()
@@ -156,9 +169,11 @@ def _load_settings(theme_name: str) -> dict[str, Any]:
 
     logger.debug(f"Loaded '{theme_name}' theme settings.")
 
+    default_font = _load_font(font_name=theme.text_font)
+
     return {
         # Quality
-        "figure.dpi": 100,
+        "figure.dpi": 130,
         "text.antialiased": True,
         "lines.antialiased": True,
         "patch.antialiased": True,
@@ -167,14 +182,14 @@ def _load_settings(theme_name: str) -> dict[str, Any]:
         "figure.edgecolor": theme.edge_colour,
         "figure.facecolor": theme.face_colour,
         "figure.figsize": DEFAULT_FIG_SIZE,
-        "figure.titlesize": int(theme.title_size * 1.5),
+        "figure.titlesize": int(theme.text_size * 1.1),
         "figure.autolayout": True,  # Not sure if this will break anything...
         # Axes
         "axes.facecolor": theme.face_colour,
         "axes.edgecolor": theme.edge_colour,
         "axes.prop_cycle": theme.get_cycler(),
         "axes.titlelocation": "left",
-        "axes.titlesize": theme.title_size,
+        "axes.titlesize": int(theme.text_size * 0.9),
         "axes.labelsize": theme.text_size,
         "axes.labelpad": 10,
         "axes.labelcolor": theme.text_colour,
@@ -187,7 +202,7 @@ def _load_settings(theme_name: str) -> dict[str, Any]:
         # Text
         "text.color": theme.text_colour,
         "font.size": theme.text_size,
-        "font.family": _load_font(font_name=theme.text_font),
+        "font.family": default_font,
         "font.stretch": "semi-expanded",
         # X-Ticks
         "xtick.top": True,
@@ -219,7 +234,7 @@ def _load_settings(theme_name: str) -> dict[str, Any]:
         "legend.framealpha": 0.4,
         "legend.facecolor": theme.face_colour,
         "legend.borderpad": 0.5,
-        "legend.fontsize": theme.text_size,
+        "legend.fontsize": int(theme.text_size * 0.9),
         "legend.labelcolor": theme.text_colour,
     }
 
@@ -230,59 +245,69 @@ def _load_settings(theme_name: str) -> dict[str, Any]:
 #       the resources folder.
 
 _colour_cycle = {
-    "Light": [
-        "#CC0019",
-        "#016AC6",
-        "#FF8201",
-        "#016AC6",
-        "#FFB600",
-        "#016AC6",
-        "#AED000",
-        "#00939D",
-        "#00892F",
-        "#00939D",
+    "BrickPlot": [
+        # A twist on the classic Matplotlib theme.
+        "#0055BF",  # Blue
+        "#FE8A18",  # Orange
+        "#237841",  # Green
+        "#C91A09",  # Red
+        "#81007B",  # Purple
+        "#583927",  # Brown
+        "#FC97AC",  # Pink
+        "#9BA19D",  # Light Gray
+        "#9B9A5A",  # Olive Green
+        "#008F9B",  # Dark Turquoise
     ],
-    "Dark": [
-        "#FF6879",
-        "#F9E17D",
-        "#F1A7DC",
-        "#E59F6E",
-        "#C7B2DD",
-        "#92C2EA",
-        "#CDEA80",
-        "#B8DCD2",
+    "SandBrickPlot": [
+        # A pastel twist on the classic Matplotlib theme.
+        "#6074A1",  # Sand Blue
+        "#FA9C1C",  # Earth Orange
+        "#C7D23C",  # Medium Lime
+        "#D67572",  # Sand Red
+        "#845E84",  # Sand Purple
+        "#B67B50",  # Fabuland Brown
+        "#E4ADC8",  # Bright Pink
+        "#E4CD9E",  # Tan
+        "#73DCA1",  # Medium Green
+        "#55A5AF",  # Light Turquoise
     ],
 }
 
 themes = {
     "slate": Theme(
-        edge_colour="#FFFFFF",
-        face_colour="#1E1E1E",
-        text_colour="#FFFFFF",
-        colour_cycle=_colour_cycle["Dark"],
-        title_size=11,
-        text_font="cmuntx.ttf",
-        text_size=13,
-        cmap="viridis",
+        edge_colour="#FFFFFF",  # White
+        face_colour="#1E1E1E",  # Slate
+        text_colour="#FFFFFF",  # White
+        colour_cycle=_colour_cycle["BrickPlot"],
+        text_font=CMU_BRIGHT_SEMIBOLD,
+        text_size=MINIMUM_TEXT_SIZE,
+        cmap="magma",
+    ),
+    "sandyslate": Theme(
+        edge_colour="#FFFFFF",  # White
+        face_colour="#1E1E1E",  # Slate
+        text_colour="#FFFFFF",  # White
+        colour_cycle=_colour_cycle["SandBrickPlot"],
+        text_font=CMU_BRIGHT_SEMIBOLD,
+        text_size=MINIMUM_TEXT_SIZE,
+        cmap="magma",
     ),
     "light": Theme(
-        edge_colour="#000000",
-        face_colour="#FFFFFF",
-        text_colour="#000000",
-        colour_cycle=_colour_cycle["Light"],
-        title_size=11,
-        text_font="cmuntx.ttf",
-        text_size=13,
-        cmap="viridis",  # "hot_r",
+        edge_colour="#000000",  # Black
+        face_colour="#FFFFFF",  # White
+        text_colour="#000000",  # Black
+        colour_cycle=_colour_cycle["BrickPlot"],
+        text_font=CMU_BRIGHT_SEMIBOLD,
+        text_size=MINIMUM_TEXT_SIZE,
+        cmap="magma_r",
     ),
     "draft": Theme(
         edge_colour="#000000",
-        face_colour="#C2C2C2",
+        face_colour="#D9D9D9",
         text_colour="#000000",
-        colour_cycle=_colour_cycle["Light"],
-        title_size=10,
-        text_font="cmunorm.ttf",
-        text_size=13,
-        cmap="viridis",
+        colour_cycle=_colour_cycle["BrickPlot"],
+        text_font=CMU_TYPEWRITER_TEXT_REGULAR,
+        text_size=MINIMUM_TEXT_SIZE,
+        cmap="magma_r",
     ),
 }
