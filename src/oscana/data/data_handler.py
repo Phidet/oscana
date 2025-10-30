@@ -12,7 +12,7 @@ from __future__ import annotations
 
 __all__ = ["DataHandler"]
 
-from typing import TypeVar, Generic
+from typing import TypeVar, Generic, NoReturn, Any, Callable
 
 import logging
 
@@ -21,7 +21,9 @@ from .io_base import DataIOStrategy
 from .t_metadata import TransformMetadata
 from .f_metadata import FileMetadata
 from .transform import TransformBase
+from .callback_base import DataCallbackBase
 from ..utils import import_plugins, OscanaError
+from ..escape import Style
 
 # =============================== [ Logging  ] =============================== #
 
@@ -33,6 +35,97 @@ _logger = logging.getLogger("Root")
 #       It seems to be working though...
 
 plugins = import_plugins(file=__file__)
+
+# =========================== [ Helper Functions ] =========================== #
+
+
+def _check_has_cuts_table(has_cuts_table: bool) -> None:
+    """\
+    [ Internal ] Check if cuts table is enabled.
+    
+    Parameters
+    ----------
+    has_cuts_table : bool
+        Whether cuts table is enabled.
+    """
+    if not has_cuts_table:
+        _error(
+            OscanaError,
+            "Cuts table is not enabled for this `DataHandler` object!",
+            _logger,
+        )
+
+
+def _check_data_locked(is_data_locked: bool) -> None:
+    """\
+    [ Internal ] Check if data is locked.
+    
+    Parameters
+    ----------
+    is_data_locked : bool
+        Whether data is locked.
+    """
+    if is_data_locked:
+        _error(
+            OscanaError,
+            "Data is locked, thus cannot be modified!",
+            _logger,
+        )
+
+
+def _run_callbacks(
+    dh: DataHandler,
+    callbacks: list[DataCallbackBase],
+    transform: TransformBase,
+    is_before_transform: bool,
+) -> int:
+    """\
+    [ Internal ] Run the registered callbacks and count errors.
+
+    Parameters
+    ----------
+    dh : DataHandler
+        The `DataHandler` instance.
+    
+    callbacks : list[DataCallbackBase]
+        The list of callbacks to run.
+
+    transform : TransformBase
+        The transform that is being applied.
+
+    is_before_transform : bool
+        Whether the callbacks are for the before or after the transform.
+
+    Returns
+    -------
+    int
+        The number of errors encountered while running the callbacks.
+    """
+    n_errors = 0
+
+    for callback in callbacks:
+        try:
+            if is_before_transform:
+                callback.before_transform(dh=dh, transform=transform)
+            else:
+                callback.after_transform(dh=dh, transform=transform)
+        except Exception as e:
+            n_errors += 1
+
+            stage = "before" if is_before_transform else "after"
+
+            _warn(
+                RuntimeWarning,
+                f"Error while running callback `{callback}` "
+                f"{stage} applying transform `{transform}`. "
+                f"{e.__class__.__name__}: {e}",
+                _logger,
+            )
+
+            continue
+
+    return n_errors
+
 
 # ============================= [ Data Handler ] ============================= #
 
@@ -55,6 +148,7 @@ class DataHandler(Generic[T]):
         "_f_metadata",
         "_data_table",
         "_cuts_table",
+        "_is_data_locked",
     ]
 
     def __init__(
@@ -103,7 +197,46 @@ class DataHandler(Generic[T]):
         self._data_table: T = self.io._init_data_table()
         self._cuts_table: T = self.io._init_cuts_table()
 
-    def apply_transforms(self, transforms: list[TransformBase]) -> None:
+        self._is_data_locked: bool = True
+
+    def lock_data(self) -> None:
+        """\
+        Lock the data, preventing any modifications.
+        """
+        self._is_data_locked = True
+
+        _logger.info("Data has been locked!")
+
+    def unlock_data(self) -> None:
+        """\
+        Unlock the data, allowing modifications.
+
+        Note
+        ----
+        Realistically, this should never have to be used by the user.
+        """
+        self._is_data_locked = False
+
+        _warn(
+            RuntimeWarning, "Data has been unlocked for modification!", _logger
+        )
+
+    def is_data_locked(self) -> bool:
+        """\
+        Check if the data is locked.
+
+        Returns
+        -------
+        bool
+            Whether the data is locked.
+        """
+        return self._is_data_locked
+
+    def apply_transforms(
+        self,
+        transforms: list[TransformBase],
+        callbacks: list[DataCallbackBase] | None = None,
+    ) -> None:
         """\
         Apply the transforms to the data.
         
@@ -111,16 +244,33 @@ class DataHandler(Generic[T]):
         ----------
         transforms : list[TransformBase]
             List of transforms to apply.
+
+        callbacks : list[DHCallbackBase] | None
+            List of callbacks to call after each transform. Defaults to `None`.
         """
-        n_errors: int = 0
+        # (1) Input Validation.
+        if callbacks is None:
+            callbacks = []
+
+        n_tf_errors: int = 0
+        n_cb_errors: int = 0
 
         for i, transform in enumerate(transforms):
             len_before = self.io.get_data_length()
 
+            # (2) Run callbacks before the transform.
+            n_cb_errors += _run_callbacks(
+                dh=self,
+                callbacks=callbacks,
+                transform=transform,
+                is_before_transform=True,
+            )
+
+            # (3) Unlock, Transform, Lock.
             try:
                 self._data_table, self._cuts_table = transform(dh=self)
             except Exception as e:
-                n_errors += 1
+                n_tf_errors += 1
 
                 _warn(
                     RuntimeWarning,
@@ -129,22 +279,49 @@ class DataHandler(Generic[T]):
                     _logger,
                 )
 
-            else:
-                self._t_metadata._add_transform(transform=transform)
+                continue
+
+            # (4) Save transform metadata.
+            self._t_metadata._add_transform(transform=transform)
+
+            # (5) Run callbacks after the transform.
+            n_cb_errors += _run_callbacks(
+                dh=self,
+                callbacks=callbacks,
+                transform=transform,
+                is_before_transform=False,
+            )
 
             _logger.info(
                 f"({i + 1}/{len(transforms)}) Applied the transform "
-                f"`{transform}` to the data with {n_errors} errors. "
-                f"Number of Rows {len_before} -> {self.io.get_data_length()}."
+                f"`{transform}` to the data with {n_tf_errors} errors. "
+                f"Number of Rows {len_before} -> "
+                f"{self.io.get_data_length()}."
             )
 
-        if n_errors > 0:
+        # Note: We do not want to interrupt the loop due to errors!
+
+        if (n_tf_errors > 0) or (n_cb_errors > 0):
             _error(
                 OscanaError,
-                f"Failed to apply {n_errors} transforms to the data. (See above"
-                " warnings.)",
+                f"Failed to apply {n_tf_errors}/{len(transforms)} transforms "
+                "to the data, or failed to run callbacks! "
+                "(Check above warnings.)",
                 _logger,
             )
+
+    def get_transforms_dict(self) -> dict[str, dict[str, Any]]:
+        """\
+        Get the transforms as a dictionary.
+        
+        Returns
+        -------
+        dict[str, dict[str, Any]]
+            A dictionary containing the metadata. The keys are the name of the 
+            transform and the values are keyword arguments passed to the 
+            function.
+        """
+        return self._t_metadata.to_dict()
 
     def print_handler_info(self) -> None:
         """\
@@ -152,18 +329,52 @@ class DataHandler(Generic[T]):
         """
         info = self.io._get_strategy_info()
 
-        unknown: str = "???"
+        unknown = "???"
 
-        print("Data IO\n" + "-" * 7)
-        print("\t- IO Strategy Class : " + str(self.io))
-        print("\t- SNTP Loader       : " + info.get("SNTP Loader", unknown))
-        print("\t- uDST Loader       : " + info.get("uDST Loader", unknown))
-        print("\t- HDF5 Loader       : " + info.get("HDF5 Loader", unknown))
-        print("\t- HDF5 Writer       : " + info.get("HDF5 Writer", unknown))
-        print("\nSettings\n" + "-" * 8)
+        print(Style.BD + "Data IO\n" + "-" * 7 + Style.R)
+        print(
+            "\t- IO Strategy Class : "
+            + Style.IT
+            + Style.FG[33]
+            + str(self.io)
+            + Style.R
+        )
+        print(
+            "\t- SNTP Loader       : "
+            + Style.IT
+            + Style.FG[33]
+            + info.get("SNTP Loader", unknown)
+            + Style.R
+        )
+        print(
+            "\t- uDST Loader       : "
+            + Style.IT
+            + Style.FG[33]
+            + info.get("uDST Loader", unknown)
+            + Style.R
+        )
+        print(
+            "\t- HDF5 Loader       : "
+            + Style.IT
+            + Style.FG[33]
+            + info.get("HDF5 Loader", unknown)
+            + Style.R
+        )
+        print(
+            "\t- HDF5 Writer       : "
+            + Style.IT
+            + Style.FG[33]
+            + info.get("HDF5 Writer", unknown)
+            + Style.R
+        )
+        print(Style.BD + "\nSettings\n" + "-" * 8 + Style.R)
         print(
             "\t- Cuts Table : "
-            + ("Enabled" if self._has_cuts_table else "Disabled")
+            + (
+                Style.FG[10] + "Enabled".upper() + Style.R
+                if self._has_cuts_table
+                else Style.FG[9] + "Disabled".upper() + Style.R
+            )
         )
 
     def print_metadata(self) -> None:
@@ -171,28 +382,46 @@ class DataHandler(Generic[T]):
         Print metadata.
         """
         self._t_metadata.print()
+
         print()
+
         for fm in self._f_metadata:
             fm.print()
 
-        print()  # Add a newline for better readability.
+        print()
 
     @staticmethod
     def print_available_plugins() -> None:
         """\
         Print available plugins.
         """
-        print("Available Data IO Plugins")
-        print("-------------------------")
+        print(Style.BD + "Available Data IO Plugins" + Style.R)
+        print(Style.BD + "-------------------------" + Style.R)
         for plugin_name in plugins.keys():
             print(f"\t- '{plugin_name}'")
 
         if not plugins:
-            print("\t[ No plugins ]")
+            print(f"\t{Style.FG[8]}[ No plugins ]{Style.R}")
 
     @property
     def data(self) -> T:
         return self._data_table
+
+    @data.setter
+    def data(self, value: T) -> None:
+        _check_data_locked(is_data_locked=self._is_data_locked)
+        self._data_table = value
+
+    @property
+    def cuts(self) -> T | NoReturn:
+        _check_has_cuts_table(has_cuts_table=self._has_cuts_table)
+        return self._cuts_table
+
+    @cuts.setter
+    def cuts(self, value: T) -> None:
+        _check_data_locked(is_data_locked=self._is_data_locked)
+        _check_has_cuts_table(has_cuts_table=self._has_cuts_table)
+        self._cuts_table = value
 
     @property
     def io(self) -> DataIOStrategy[T]:
@@ -205,7 +434,7 @@ class DataHandler(Generic[T]):
     def __str__(self) -> str:
         return (
             f"oscana.{self.__class__.__name__}("
-            f"n_variables={len(self._variables)}, "
+            f"n_variables={self.io.get_n_variables()}, "
             f"n_transforms={len(self._t_metadata.transforms)}, "
             f"n_files={len(self._f_metadata)})"
         )
