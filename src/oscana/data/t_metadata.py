@@ -23,18 +23,29 @@ __all__ = []
 
 from typing import Any
 
-import logging
+import logging, re
 from dataclasses import dataclass, field
 
 from ..logger import _error
-from ..utils import OscanaError
 from .transform import TransformBase
+from ..escape import Style
 
 # =============================== [ Logging  ] =============================== #
 
 _logger = logging.getLogger("Root")
 
+# ============================== [ Constants  ] ============================== #
+
+TRANSFORM_NAME_REGEX = re.compile(
+    r"^uid_(?P<uid>\d{9})_(?P<type>tfm|cut)_(?P<date>\d{8})_(?P<name>.+)$"
+)
+
+
 # ============================ [ File Metadata  ] ============================ #
+
+
+# TODO: Why are we using a tuple to store our transforms when there is a
+#       perfectly sane way of doing this with a dictionary? Change this.
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,57 +111,49 @@ class TransformMetadata:
         """
         return "_".join(name.split("_")[2:]).lower()
 
-    def to_dict(self) -> dict[str, list[dict[str, Any]]]:
+    def to_dict(self) -> dict[str, dict[str, Any]]:
         """\
-        Convert the metadata to a dictionary.
+        Get the transforms as a dictionary.
 
         Returns
         -------
-        dict[str, list[dict[str, Any]]]
-            A dictionary containing the metadata.
+        dict[str, dict[str, Any]]
+            A dictionary containing the metadata. The keys are the name of the
+            transform and the values are keyword arguments passed to the 
+            function.
         """
+        # Note: Neat way to avoid overwriting repeated transform names.
+
         return {
-            "transforms": [
-                {
-                    "name": data[0],
-                    "shortened_name": self._extract_transform_name(data[0]),
-                    "kwargs": data[1],
-                }
-                for data in self.transforms
-            ]
+            (f"uid_{i:09d}_" + str(data[0])): data[1]
+            for i, data in enumerate(self.transforms)
         }
 
     @staticmethod
-    def from_dict(data: dict[str, list[dict[str, Any]]]) -> TransformMetadata:
+    def from_dict(meta_dict: dict[str, dict[str, Any]]) -> TransformMetadata:
         """\
         Load the metadata from a dictionary.
 
         Parameters
         ----------
-        data : dict[str, list[dict[str, Any]]]
-            The dictionary containing the metadata.
+        meta_dict : dict[str, dict[str, Any]]
+            The dictionary containing the transform metadata.
         """
-        if "transforms" not in data:
-            _error(
-                KeyError,
-                "The dictionary does not contain the 'transforms' key.",
-                _logger,
-            )
-
         metadata = TransformMetadata()
 
-        for transform in data["transforms"]:
-            if "name" not in transform or "kwargs" not in transform:
+        for name, kwargs in meta_dict.items():
+            if not TRANSFORM_NAME_REGEX.match(name):
                 _error(
-                    OscanaError,
-                    "Failed to load the transforms for this data. Each "
-                    "transform must have a 'name' and 'kwargs' key.",
+                    ValueError,
+                    (
+                        f"Transform name '{name}' does not follow the "
+                        "naming convention 'uid_XXXXXXXXX_{tfm/cut}_YYYYMMDD_"
+                        r"{name}'."
+                    ),
                     _logger,
                 )
 
-                continue
-
-            metadata.transforms.append((transform["name"], transform["kwargs"]))
+            metadata.transforms.append((name[14:], kwargs))
 
         return metadata
 
@@ -158,25 +161,34 @@ class TransformMetadata:
         """\
         Print the metadata.
         """
-        print("Cuts & Transforms\n-----------------")
+        print(Style.BD + "Cuts & Transforms\n-----------------" + Style.R)
         for transform in self.transforms:
-            type_ = "CUT" if transform[0].startswith("cut_") else "TFM"
+            type_ = "C" if transform[0].startswith("cut_") else "T"
+
+            fg_colour = Style.FG[88] if type_ == "C" else Style.FG[27]
+
             name = self._extract_transform_name(transform[0])
             kwargs = ", ".join(
-                f"{key}={repr(value)}" for key, value in transform[1].items()
+                f"{key}={Style.IT +  Style.FG[33] + repr(value) + Style.R}"
+                for key, value in transform[1].items()
             )
-            print(f"[{type_}] {name}({kwargs})")
+
+            print(
+                f"{fg_colour}[{type_}]{Style.R}"
+                f"   {name}{Style.FG[3]}({Style.R}{kwargs}"
+                f"{Style.FG[3]}){Style.R}"
+            )
 
         if not len(self.transforms):
-            print("\t[ No Cuts & Transforms Applied ]")
+            print(f"\t{Style.FG[8]}[ No Cuts & Transforms Applied ]{Style.R}")
 
-    def __eq__(self, value: object) -> bool:
+    def __eq__(self, other: object) -> bool:
         """\
         Check if the metadata is the same for two datasets.
 
         Parameters
         ----------
-        value : object
+        other : object
             The other object to compare with.
 
         Returns
@@ -186,7 +198,7 @@ class TransformMetadata:
         """
         # (1) Check if the other object is of the same type.
 
-        if not isinstance(value, TransformMetadata):
+        if not isinstance(other, TransformMetadata):
             _error(
                 ValueError,
                 (
@@ -198,25 +210,28 @@ class TransformMetadata:
 
         # (2) Extract the transfrom names.
 
-        these_names = set(
-            [self._extract_transform_name(data[0]) for data in self.transforms]
-        )
-        other_names = set(
-            [
-                value._extract_transform_name(data[0])
-                for data in value.transforms
-            ]
-        )
+        these_names = [
+            f"{self._extract_transform_name(data[0])}("
+            + ", ".join(f"{key}={value}" for key, value in data[1].items())
+            + ")"
+            for data in self.transforms
+        ]
+        other_names = [
+            f"{other._extract_transform_name(data[0])}("
+            + ", ".join(f"{key}={value}" for key, value in data[1].items())
+            + ")"
+            for data in other.transforms
+        ]
 
         return these_names == other_names
 
-    def __ne__(self, value: object) -> bool:
+    def __ne__(self, other: object) -> bool:
         """\
         Check if the metadata is not the same for two datasets.
 
         Parameters
         ----------
-        value : object
+        other : object
             The other object to compare with.
 
         Returns
@@ -224,7 +239,7 @@ class TransformMetadata:
         bool
             True if the metadata is not the same, False otherwise.
         """
-        return not self.__eq__(value)
+        return not self.__eq__(other)
 
     def __str__(self) -> str:
         return (
