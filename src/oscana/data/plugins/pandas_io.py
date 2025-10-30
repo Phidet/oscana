@@ -10,17 +10,18 @@ Email  - aditya.marathe.20@ucl.ac.uk
 
 from __future__ import annotations
 
-__all__ = ["PandasIO"]  # Only export the class (any other stuff is ignored)!
+__all__ = ["PandasIO"]
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Literal
 
 import logging
 from pathlib import Path
 
 import numpy.typing as npt
 import uproot
+import numpy as np
 import pandas as pd
-import h5py
+import h5py, json
 
 from ...logger import _error
 from ..io_base import (
@@ -45,12 +46,36 @@ if TYPE_CHECKING:
 
 _logger = logging.getLogger("Root")
 
+
+# ============================== [ Constants  ] ============================== #
+
+SAVE_FILE_FORMAT = "{timestamp}_{name}.{format}"
+
 # =============================== [ Helpers  ] =============================== #
 
 
 def _v1_naive_loader(
     variables: list[str], file: str
-) -> tuple[pd.DataFrame, FileMetadata]:
+) -> LoadedDataType[pd.DataFrame]:
+    """\
+    A simple way to load variables from a ROOT file using Uproot.
+    
+    Parameters
+    ----------
+    variables : list[str]
+        List of variables to load from the ROOT file.
+    
+    file : str
+        The name of the ROOT file to load the variables from.
+        
+    Returns
+    -------
+    LoadedDataType[pd.DataFrame]
+        A tuple containing:
+        - A `DataFrame` with the loaded variables.
+        - A list of `FileMetadata` objects with the metadata of the files.
+        - A `TransformMetadata` object with the metadata of the transforms.
+    """
     _logger.debug(f"Loading variables from '{file}' using the V1 Naive Loader.")
 
     file_dir = _get_dir_from_env(file=file)
@@ -70,13 +95,10 @@ def _v1_naive_loader(
         _logger.debug(f"Extracting variable '{variable}' from '{file}'...")
 
         # Note: Not great that we need to specify a base in this way.
-
         # TODO: Fix this.
+
         base = variable.split("/")[0]
         key = "/".join(variable.split("/")[1:])
-
-        # Note: I have added some `pyright` comments to suppress annoying
-        #       warnings.
 
         try:
             base_branch = uproot_file[base]
@@ -106,38 +128,223 @@ def _v1_naive_loader(
 
     _logger.info(f"Extracted variables from '{file}'.")
 
-    return pd.DataFrame(data_dict), metadata
+    return pd.DataFrame(data_dict), [metadata], TransformMetadata()
 
 
-# =========================== [ Dynamic Helpers  ] =========================== #
-
-
-def hlp_20250205_from_sntp(
-    variables: list[str], files: list[str]
+def _v1_naive_loader_h5(
+    variables: list[str], file: str | Path
 ) -> LoadedDataType[pd.DataFrame]:
     """\
-    [ Internal ]
+    A simple way to load variables from an HDF5 file using h5py.
     
-    Name: Naïve Loader V1
+    Parameters
+    ----------
+    variables : list[str]
+        List of variables to load from the HDF5 file.
+
+    file : str | Path
+        The name or path of the HDF5 file to load the variables from.
+
+    Returns
+    -------
+    LoadedDataType[pd.DataFrame]
+        A tuple containing:
+        - A `DataFrame` with the loaded variables.
+        - A list of `FileMetadata` objects with the metadata of the files.
+        - A `TransformMetadata` object with the metadata of the transforms.
+    """
+    _logger.debug(
+        f"Loading variables from '{file}' using the V1 Naive Loader (HDF5)."
+    )
+
+    variables_set: set[str] = {var.split("/")[-1] for var in variables}
+
+    with h5py.File(file, "r") as h5_file:
+        _logger.info(f"Opened '{file}' using h5py.")
+
+        # (1) Extract the metadata.
+
+        t_branch = h5_file["metadata/transforms"]
+
+        if not isinstance(t_branch, h5py.Dataset):
+            _error(
+                OscanaError,
+                f"The 'transforms' branch in '{file}' is not a dataset!",
+                _logger,
+            )
+
+        t_branch_dict = json.loads(t_branch[()].decode("utf-8"))
+        t_metadata = TransformMetadata.from_dict(meta_dict=t_branch_dict)
+
+        f_branch = h5_file["metadata/files"]
+
+        if not isinstance(f_branch, h5py.Dataset):
+            _error(
+                OscanaError,
+                f"The 'files' branch in '{file}' is not a dataset!",
+                _logger,
+            )
+
+        f_branch_dict = json.loads(f_branch[()].decode("utf-8"))
+        f_metadata = [
+            FileMetadata.from_dict(meta_dict=f) for f in f_branch_dict
+        ]
+
+        del t_branch, f_branch, f_branch_dict, t_branch_dict
+
+        # (2) Extract the data to a `DataFrame`.
+
+        data_dict: dict[str, npt.NDArray] = {}
+
+        data_branch = h5_file["data"]
+
+        if not isinstance(data_branch, h5py.Group):
+            _error(
+                OscanaError,
+                f"The 'data' branch in '{file}' is not a group!",
+                _logger,
+            )
+
+        for column_name in data_branch.keys():
+            column_name = str(column_name)
+
+            # Note: We should always be loading in all the "ana." variables, at
+            #       least for this naive loader. Ideally, we should have some
+            #       method of specifying which "ana." variables to load to avoid
+            #       hogging up memory with useless data.
+
+            is_not_ana_variable = not column_name.startswith("ana.")
+
+            if is_not_ana_variable and (column_name not in variables_set):
+                continue
+
+            _logger.debug(
+                f"Extracting variable '{column_name}' from '{file}'..."
+            )
+
+            column = data_branch[column_name]
+
+            if not isinstance(column, h5py.Dataset):
+                _error(
+                    OscanaError,
+                    f"Variable 'data/{column_name}' in '{file}' is not a "
+                    "dataset!",
+                    _logger,
+                )
+
+            data_dict[column_name] = column[:]
+
+        cuts_branch = h5_file["cuts"]
+
+        if not isinstance(cuts_branch, h5py.Group):
+            _error(
+                OscanaError,
+                f"The 'cuts' branch in '{file}' is not a group!",
+                _logger,
+            )
+
+        for column_name in cuts_branch.keys():
+            column_name = str(column_name)
+
+            _logger.debug(
+                f"Extracting cut variable '{column_name}' from '{file}'..."
+            )
+
+            column = cuts_branch[column_name]
+
+            if not isinstance(column, h5py.Dataset):
+                _error(
+                    OscanaError,
+                    f"Variable 'cuts/{column_name}' in '{file}' is not a "
+                    "dataset!",
+                    _logger,
+                )
+
+            data_dict[column_name] = column[:]
+
+        return pd.DataFrame(data=data_dict), f_metadata, t_metadata
+
+
+def _is_jagged_array(data: pd.Series) -> bool:
+    """\
+    Check if the data is a jagged array (i.e., a list of lists).
+
+    Parameters
+    ----------
+    data : pd.Series
+        The data to check.
+
+    Returns
+    -------
+    bool
+        True if the data is a jagged array, False otherwise.
+    """
+    # Note: This is a really crappy way to check for jagged arrays!
+    # TODO: Make this less crappy.
+    return isinstance(data.iloc[0], np.ndarray) and data.dtype == "object"
+
+
+def _loader_function(
+    helper_func: Callable[
+        [list[str], str | Path], LoadedDataType[pd.DataFrame]
+    ],
+    variables: list[str],
+    files: list[str | Path],
+) -> LoadedDataType[pd.DataFrame]:
+    """\
+    [ Internal ] Generic loader function to handle loading data from files.
+
+    Parameters
+    ----------
+    helper_func : Callable
+        The helper function to use for loading the data.
+
+    variables : list[str]
+        List of variables to load from the files.
+
+    files : list[str | Path]
+        List of files to load the data from.
+    
+    Returns
+    -------
+    LoadedDataType[pd.DataFrame]
+        A tuple containing:
+        - A `DataFrame` with the loaded variables.
+        - A list of `FileMetadata` objects with the metadata of the files.
+        - A `TransformMetadata` object with the metadata of the transforms.
     """
     exceptions_ = []
     data_list: list[pd.DataFrame] = []
     f_metadata_list: list[FileMetadata] = []
+    t_metadata_comp: TransformMetadata | None = None
 
     for file in files:
         try:
-            data, f_meta = _v1_naive_loader(variables, file)
+            data, f_metadata, t_metadata = helper_func(variables, file)
 
-            if len(f_metadata_list):
-                if f_meta != f_metadata_list[-1]:
-                    _error(
-                        OscanaError,
-                        "All files must have the same metadata!",
-                        _logger,
-                    )
+            if len(f_metadata_list) and all(
+                fm != f_metadata_list[-1] for fm in f_metadata
+            ):
+                _error(
+                    OscanaError,
+                    "All files must have the same metadata! The metadata for "
+                    f"{file} is different from the previous files.",
+                    _logger,
+                )
 
+            if len(f_metadata_list) and t_metadata_comp != t_metadata:
+                _error(
+                    OscanaError,
+                    "All files must have the same transforms applied! The "
+                    f"transforms for {file} are different from the previous "
+                    "files.",
+                    _logger,
+                )
+
+            t_metadata_comp = t_metadata_comp or t_metadata
             data_list.append(data)
-            f_metadata_list.append(f_meta)
+            f_metadata_list.extend(f_metadata)
+
         except Exception as e:
             exceptions_.append(e)
 
@@ -156,7 +363,29 @@ def hlp_20250205_from_sntp(
             _logger,
         )
 
-    return (pd.concat(data_list), f_metadata_list, None)
+    assert (
+        t_metadata_comp is not None
+    ), "Unreachable: Transform metadata is `None`! "
+
+    return (pd.concat(data_list), f_metadata_list, t_metadata_comp)
+
+
+# =========================== [ Dynamic Helpers  ] =========================== #
+
+
+def hlp_20250205_from_sntp(
+    variables: list[str], files: list[str]
+) -> LoadedDataType[pd.DataFrame]:
+    """\
+    [ Internal ]
+    
+    Name: Naïve Loader V1
+    """
+    return _loader_function(
+        helper_func=_v1_naive_loader,  # pyright: ignore[reportArgumentType]
+        variables=variables,
+        files=files,  # pyright: ignore[reportArgumentType]
+    )
 
 
 def hlp_20250205_from_udst(
@@ -180,45 +409,91 @@ def hlp_20250205_from_hdf5(
     """\
     [ Internal ]
 
-    Not Implemented!
+    Name: HDF5 Loader V1
     """
-    _error(
-        NotImplementedError,
-        "The HDF5 loader is not implemented yet!",
-        _logger,
+    return _loader_function(
+        helper_func=_v1_naive_loader_h5,  # pyright: ignore[reportArgumentType]
+        variables=variables,
+        files=files,  # pyright: ignore[reportArgumentType]
     )
 
 
 def hlp_20250205_to_hdf5(
     data: pd.DataFrame,
-    file_metadata: FileMetadata,
+    cuts: pd.DataFrame | None,
+    file_metadata: list[FileMetadata],
     transform_metadata: TransformMetadata,
-    file: str | Path,
+    file_path: str | Path,
+    compression: Literal["gzip", "lzf"] | None,
 ) -> None:
     """\
     [ Internal ]
 
     Name: HDF5 Writer V1
     """
-    columns = data.columns.tolist()
+    # (1) Check the file path.
+    file_path = Path(file_path)
 
-    my_file = h5py.File(file, "w")
-
-    for column in columns:
-        my_file.create_dataset(
-            column,
-            data=data[column].to_numpy(),
-            compression="gzip",
-            compression_opts=9,
+    if not (file_path.is_file and (file_path.suffix == ".h5")):
+        _error(
+            OscanaError,
+            f"File '{file_path}' is not an HDF5 file! "
+            + "Please provide a file with the '.h5' extension.",
+            _logger,
         )
 
-    my_file.close()
+    file_path.parent.mkdir(parents=True, exist_ok=True)
 
-    _error(
-        NotImplementedError,
-        "The HDF5 writer is not implemented yet!",
-        _logger,
-    )
+    # (2) Compression.
+    compression_kwargs: dict[str, Any] = {}
+
+    if compression is not None:
+        compression_kwargs = {"compression": compression}
+
+    with h5py.File(file_path, "w") as my_file:
+        data_branch = my_file.create_group(name="data")
+
+        for column_name in data.columns:
+            data_type = data[column_name].dtype
+
+            if _is_jagged_array(data=data[column_name]):
+                data_type = h5py.special_dtype(
+                    vlen=data[column_name].iloc[0].dtype
+                )
+
+            data_branch.create_dataset(
+                name=column_name,
+                dtype=data_type,
+                data=data[column_name].to_numpy(),
+                **compression_kwargs,
+            )
+
+        if (cuts is not None) and (not cuts.empty):
+            cuts_branch = my_file.create_group(name="cuts")
+
+            for column_name in cuts.columns:
+                cuts_branch.create_dataset(
+                    name=column_name,
+                    dtype=cuts[column_name].dtype,
+                    data=cuts[column_name].to_numpy(),
+                    **compression_kwargs,
+                )
+
+        metadata_branch = my_file.create_group(name="metadata")
+
+        metadata_branch.create_dataset(
+            name="transforms",
+            dtype=h5py.string_dtype(encoding="utf-8"),
+            data=json.dumps(transform_metadata.to_dict()).encode("utf-8"),
+        )
+
+        metadata_branch.create_dataset(
+            name="files",
+            dtype=h5py.string_dtype(encoding="utf-8"),
+            data=json.dumps([fm.to_dict() for fm in file_metadata]).encode(
+                "utf-8"
+            ),
+        )
 
 
 # ============================= [ IO Strategy  ] ============================= #
@@ -267,32 +542,82 @@ class PandasIO(DataIOStrategy[pd.DataFrame]):
         return pd.DataFrame()
 
     def _from_sntp(self, files: list[str]) -> None:
-        # We do not expect any `TransformMetadata` from the SNTP files.
-        data, f_meta, _ = PandasIO._sntp_loader(
-            variables=self._parent._variables, files=files
+        data, f_metadata, t_metadata = PandasIO._sntp_loader(
+            variables=self._parent._variables,
+            files=files,  # pyright: ignore[reportArgumentType]
         )
 
+        if (
+            len(self._parent._f_metadata)
+            and self._parent._t_metadata != t_metadata
+        ):
+            _error(
+                OscanaError,
+                "All files must have the same transforms applied! The "
+                "transforms for the SNTP file(s) are different from the "
+                "previous files.",
+                _logger,
+            )
+
+        if not len(self._parent._f_metadata):
+            self._parent._t_metadata = t_metadata
+
         self._parent._data_table = pd.concat([self._parent._data_table, data])
-        self._parent._f_metadata.extend(f_meta)
+        self._parent._f_metadata.extend(f_metadata)
 
     def _from_udst(self, files: list[str]) -> None:
-        # We do not expect any `TransformMetadata` from the uDST files.
-        data, f_meta, _ = self._udst_loader(
-            variables=self._parent._variables, files=files
+        data, f_metadata, t_metadata = PandasIO._udst_loader(
+            variables=self._parent._variables,
+            files=files,  # pyright: ignore[reportArgumentType]
         )
 
-        self._parent._data_table = pd.concat([self._parent._data_table, data])
-        self._parent._f_metadata.extend(f_meta)
+        if (
+            len(self._parent._f_metadata)
+            and self._parent._t_metadata != t_metadata
+        ):
+            _error(
+                OscanaError,
+                "All files must have the same transforms applied! The "
+                "transforms for the uDST file(s) are different from the "
+                "previous files.",
+                _logger,
+            )
 
-    def _from_hdf5(self, files: list[str]) -> None:
-        data, f_meta, _ = self._hdf5_loader(
-            variables=self._parent._variables, files=files
+        if not len(self._parent._f_metadata):
+            self._parent._t_metadata = t_metadata
+
+        self._parent._data_table = pd.concat([self._parent._data_table, data])
+        self._parent._f_metadata.extend(f_metadata)
+
+    def _from_hdf5(self, files: list[str | Path]) -> None:
+        data, f_metadata, t_metadata = PandasIO._hdf5_loader(
+            variables=self._parent._variables,
+            files=files,
         )
 
-        self._parent._data_table = pd.concat([self._parent._data_table, data])
-        self._parent._f_metadata.extend(f_meta)
+        if (
+            len(self._parent._f_metadata)
+            and self._parent._t_metadata != t_metadata
+        ):
+            _error(
+                OscanaError,
+                "All files must have the same transforms applied! The "
+                "transforms for the H5 file(s) are different from the "
+                "previous files.",
+                _logger,
+            )
 
-    def to_hdf5(self, file: str | Path) -> None:
+        if not len(self._parent._f_metadata):
+            self._parent._t_metadata = t_metadata
+
+        self._parent._data_table = pd.concat([self._parent._data_table, data])
+        self._parent._f_metadata.extend(f_metadata)
+
+    def to_hdf5(
+        self,
+        file: str | Path,
+        compression: Literal["gzip", "lzf"] | None = None,
+    ) -> None:
         """\
         Write the data table to an HDF5 file.
 
@@ -300,12 +625,27 @@ class PandasIO(DataIOStrategy[pd.DataFrame]):
         ----------
         file : str | Path
             The name of the HDF5 file to write to.
+
+        compression : Literal["gzip", "lzf"] | None
+            The compression algorithm to use. If `None`, no compression is used.
+            Default is `None`.
+
+        Notes
+        -----
+        Compression algorithms supported by `h5py` include: "gzip", "lzf", and 
+        "szip". However, "szip" is not supported due to licensing.
         """
-        return self._hdf5_writer(
+        return PandasIO._hdf5_writer(
             data=self._parent._data_table,
+            cuts=(
+                self._parent._cuts_table
+                if self._parent.has_cuts_table
+                else None
+            ),
             file_metadata=self._parent._f_metadata,
             transform_metadata=self._parent._t_metadata,
-            file=file,
+            file_path=file,
+            compression=compression,
         )
 
     def get_data_length(self) -> int:
@@ -318,3 +658,29 @@ class PandasIO(DataIOStrategy[pd.DataFrame]):
             Length of the data table.
         """
         return len(self._parent._data_table)
+
+    def get_cuts_length(self) -> int:
+        """\
+        Get the length of the cuts table.
+
+        Returns
+        -------
+        int
+            Length of the cuts table.
+        """
+        return (
+            len(self._parent._cuts_table) if self._parent.has_cuts_table else 0
+        )
+
+    def get_n_variables(self) -> int:
+        """\
+        Get the number of variables in the data and cuts table.
+
+        Returns
+        -------
+        int
+            Number of variables in the data and cuts table.
+        """
+        return len(self._parent.data.columns) + (
+            len(self._parent.cuts.columns) if self._parent.has_cuts_table else 0
+        )
