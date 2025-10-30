@@ -41,6 +41,7 @@ from .enumerations import (
 from ..logger import _error
 from ..utils import OscanaError, _convert_from_utc
 from ..constants import SNTP_BR_STD, SNTP_VR_RUN, SNTP_VR_EVT_UTC
+from ..escape import Style
 
 
 # =============================== [ Logging  ] =============================== #
@@ -50,27 +51,27 @@ logger = logging.getLogger("Root")
 # ============================== [ Constants  ] ============================== #
 
 _sumamry_text = """\
-{0!s}
-{1!s}
-File Format     : {2!s}
-File Type       : {3!s}
-Experiment      : {4!s}
-Detector        : {5!s}
-Int. Region     : {6!s}
-Flavour         : {7!s}
-Mag. Field      : {8!s}
-Horn Position   : {9!s}
-Target Z Shift  : {10!s} cm
-Curr. Direction : {11!s}
-Current         : {12!s} kAmps
-Run Number      : {13:,}
-MC Version      : {14!s} {15!s}
-Reco. Version   : {16!s} {17!s}
+{23}{0!s}{22}
+{23}{1!s}{22}
+File Format     : {24}{2!s}{22}
+File Type       : {24}{3!s}{22}
+Experiment      : {24}{4!s}{22}
+Detector        : {24}{5!s}{22}
+Int. Region     : {24}{6!s}{22}
+Flavour         : {24}{7!s}{22}
+Mag. Field      : {24}{8!s}{22}
+Horn Position   : {24}{9!s}{22}
+Target Z Shift  : {24}{10!s} cm{22}
+Curr. Direction : {24}{11!s}{22}
+Current         : {24}{12!s} kAmps{22}
+Run Number      : {24}{13:,}{22}
+MC Version      : {24}{14!s} {15!s}{22}
+Reco. Version   : {24}{16!s} {17!s}{22}
 Date and Time
-    Start       : {18!s}
-    End         : {19!s}
-Total Entries   : {20:,}
-First Loaded On : {21!s}
+    Start       : {24}{18!s}{22}
+    End         : {24}{19!s}{22}
+Total Entries   : {24}{20:,}{22}
+First Loaded On : {24}{21!s}{22}
 """
 
 _daikon_key_map: dict[str, tuple[EDetector, EFileType]] = {
@@ -216,6 +217,7 @@ def from_daikon_sntp(file_name: str, file: Any) -> FileMetadata | None:
     ----------
     file_name : str
         Name of the file.
+
     file : Any
         The file object.
     
@@ -370,13 +372,13 @@ class FileMetadata:
         }
 
     @staticmethod
-    def from_dict(dict: dict[str, Any]) -> FileMetadata:
+    def from_dict(meta_dict: dict[str, Any]) -> FileMetadata:
         """\
         Create a new instance of `FileMetadata` from a dictionary.
 
         Parameters
         ----------
-        dict: dict[str, Any]
+        meta_dict: dict[str, Any]
             Dictionary containing the metadata.
 
         Returns
@@ -385,30 +387,30 @@ class FileMetadata:
             New instance of `FileMetadata`.
         """
         return FileMetadata(
-            file_name=dict["file_name"],
-            file_format=EFileFormat(dict["file_format"]),
-            file_type=EFileType(dict["file_type"]),
-            experiment=EExperiment(dict["experiment"]),
-            detector=EDetector(dict["detector"]),
-            interaction=EDaikonIntRegion(dict["interaction"]),
-            flavour=EDaikonFlavour(dict["flavour"]),
-            mag_field=EDaikonMagField(dict["mag_field"]),
-            horn_pos=EHornPosition(dict["horn_pos"]),
-            tgt_z_shift=dict["tgt_z_shift"],
-            current_sign=EHornCurrent(dict["current_sign"]),
-            current=dict["current"],
-            run_number=dict["run_number"],
+            file_name=meta_dict["file_name"],
+            file_format=EFileFormat(meta_dict["file_format"]),
+            file_type=EFileType(meta_dict["file_type"]),
+            experiment=EExperiment(meta_dict["experiment"]),
+            detector=EDetector(meta_dict["detector"]),
+            interaction=EDaikonIntRegion(meta_dict["interaction"]),
+            flavour=EDaikonFlavour(meta_dict["flavour"]),
+            mag_field=EDaikonMagField(meta_dict["mag_field"]),
+            horn_pos=EHornPosition(meta_dict["horn_pos"]),
+            tgt_z_shift=meta_dict["tgt_z_shift"],
+            current_sign=EHornCurrent(meta_dict["current_sign"]),
+            current=meta_dict["current"],
+            run_number=meta_dict["run_number"],
             mc_version=(
-                EMCVersion(dict["mc_version"][0]),
-                dict["mc_version"][1],
+                EMCVersion(meta_dict["mc_version"][0]),
+                meta_dict["mc_version"][1],
             ),
             reco_version=(
-                ERecoVersion(dict["reco_version"][0]),
-                dict["reco_version"][1],
+                ERecoVersion(meta_dict["reco_version"][0]),
+                meta_dict["reco_version"][1],
             ),
-            start_time=datetime.fromisoformat(dict["start_time"]),
-            end_time=datetime.fromisoformat(dict["end_time"]),
-            n_records=dict["n_records"],
+            start_time=datetime.fromisoformat(meta_dict["start_time"]),
+            end_time=datetime.fromisoformat(meta_dict["end_time"]),
+            n_records=meta_dict["n_records"],
         )
 
     @staticmethod
@@ -470,6 +472,10 @@ class FileMetadata:
                 self.end_time,
                 self.n_records,
                 str(self.create_time)[:19],
+                # Style Modifiers
+                Style.R,
+                Style.BD,
+                Style.IT + Style.FG[33],
             )
         )
 
