@@ -30,6 +30,9 @@ __all__ = [
     "IMAGE_SIGCOR_VARIABLES",
     "IMAGE_TIME_VARIABLES",
     "IMAGE_ALL_VARIABLES",
+    "EVENT_VERTEX_VARIABLES",
+    "MC_4MOMENTUM_VARIABLES",
+    "MC_INTERACTION_VARIABLES",
     # Enums
     "EIAction",
     "EIResonance",
@@ -92,39 +95,200 @@ SNTP_VR_EVT_UTC: Final[str] = (
 
 # ====================== [ SNTP Variable Collections  ] ====================== #
 
-HEADER_VARIABLES: Final[list[str]] = [
-    f"{SNTP_BR_STD}/fHeader.fRun",  # Run number
-    f"{SNTP_BR_STD}/fHeader.fSubRun",  # Subrun number
-    f"{SNTP_BR_STD}/fHeader.fSnarl",  # Snarl number
-    f"{SNTP_BR_STD}/fHeader.fEvent",  # Event number
-]
 
-IMAGE_BASIC_VARIABLES: Final[list[str]] = [
-    f"{SNTP_BR_STD}/stp.planeview",  # Plane view
-    f"{SNTP_BR_STD}/stp.strip",  # Strip number
-    f"{SNTP_BR_STD}/stp.plane",  # Plane number
-]
+class VariableCollection(list):
+    """\
+    VariableCollection
+    ------------------
 
-IMAGE_PE_VARIABLES: Final[list[str]] = [
-    f"{SNTP_BR_STD}/stp.ph0.pe",  # Photoelectrons (East)
-    f"{SNTP_BR_STD}/stp.ph1.pe",  # Photoelectrons (West)
-]
+    A collection of ROOT SNTP variable names under a common ROOT branch.
 
-IMAGE_SIGCOR_VARIABLES: Final[list[str]] = [
-    f"{SNTP_BR_STD}/stp.ph0.sigcor",  # Normalised strip response (East)
-    f"{SNTP_BR_STD}/stp.ph1.sigcor",  # Normalised strip response (West)
-]
+    Attributes
+    ----------
+    branch_name : str
+        The name of the ROOT branch.
 
-IMAGE_TIME_VARIABLES: Final[list[str]] = [
-    f"{SNTP_BR_STD}/stp.time0",  # Charge weighted mean time [s] (East)
-    f"{SNTP_BR_STD}/stp.time1",  # Charge weighted mean time [s] (West)
-]
+    uproot : list[str]
+        The list of variable names prefixed with the ROOT branch name.
+    """
 
-IMAGE_ALL_VARIABLES: Final[list[str]] = (
+    __slots__ = ["_root"]
+
+    def __init__(self, variables: list[str], root: str | None = None) -> None:
+        """\
+        Initialises a new `VariableCollection`.
+
+        Parameters
+        ----------
+        variables : list[str]
+            The list of variable names.
+
+        root : str | None
+            The ROOT branch name for the collection. If `None`, `.uproot` will
+            return the variable names as-is.
+        """
+        super().__init__(variables)
+
+        self._root = root  # The ROOT Branch name!
+
+    @property
+    def branch_name(self) -> str | None:
+        """\
+        The ROOT branch name for the collection, if it exists.
+        """
+        return self._root
+
+    @property
+    def uproot(self) -> list[str]:
+        """\
+        The list of variable names prefixed with the ROOT branch name.
+        """
+        if self._root is None:
+            return list(self)
+
+        return [f"{self._root}/{var}" for var in self]
+
+    def __add__(self, other: object) -> "VariableCollection":
+        if isinstance(other, VariableCollection):
+            if self._root != other._root:
+                raise ValueError(
+                    "Cannot add `VariableCollections` with different ROOT "
+                    f'branches! Found "{self._root}" and "{other._root}".'
+                )
+
+            return VariableCollection(
+                variables=list(self) + list(other),
+                root=self._root,
+            )
+
+        elif isinstance(other, list):
+            # Check the branch name.
+            branch_name = None
+            stripped_list: list[str] = []
+
+            for variable in other:
+                variable_split = str(variable).split("/")
+
+                if (branch_name is None) and (len(variable_split) > 1):
+                    branch_name = variable_split[0]
+
+                if (branch_name != variable_split[0]) and (
+                    branch_name is not None
+                ):
+                    raise ValueError(
+                        "Cannot add list of variables with different ROOT "
+                        f'branches! Found "{branch_name}" and '
+                        f'"{variable_split[0]}".'
+                    )
+
+                stripped_list.append(variable_split[-1])
+
+            if (self._root != branch_name) and (branch_name is not None):
+                raise ValueError(
+                    "Cannot add `VariableCollection` with list of variables "
+                    "with different ROOT branches! "
+                    f'Found "{self._root}" and "{branch_name}".'
+                )
+
+            # Note: This means that we assign the new list of variables the
+            #       branch name of this `VariableCollection`. This is just done
+            #       to keep this implementation simple.
+
+            return VariableCollection(
+                variables=list(self) + stripped_list,
+                root=self._root,
+            )
+
+        raise ValueError(
+            "Operation `+` only supported between `VariableCollections`!"
+        )
+
+    def __radd__(self, other: object) -> "VariableCollection":
+        return self.__add__(other=other)
+
+    def __mul__(self, value: object) -> "VariableCollection":
+        raise ValueError(
+            "Operation `*` not supported for `VariableCollections`!"
+        )
+
+    def __rmul__(self, value: object) -> "VariableCollection":
+        return self.__mul__(value=value)
+
+
+HEADER_VARIABLES: Final[VariableCollection] = VariableCollection(
+    variables=[
+        "fRun",  # Run number
+        "fSubRun",  # Subrun number
+        "fSnarl",  # Snarl number
+        "fEvent",  # Event number
+    ],
+    root=SNTP_BR_STD,
+)
+
+IMAGE_BASIC_VARIABLES: Final[VariableCollection] = VariableCollection(
+    variables=[
+        "stp.planeview",  # Plane view
+        "stp.strip",  # Strip number
+        "stp.plane",  # Plane number
+    ],
+    root=SNTP_BR_STD,
+)
+
+IMAGE_PE_VARIABLES: Final[VariableCollection] = VariableCollection(
+    variables=[
+        "stp.ph0.pe",  # Photoelectrons (East)
+        "stp.ph1.pe",  # Photoelectrons (West)
+    ],
+    root=SNTP_BR_STD,
+)
+
+IMAGE_SIGCOR_VARIABLES: Final[VariableCollection] = VariableCollection(
+    variables=[
+        "stp.ph0.sigcor",  # Normalised strip response (East)
+        "stp.ph1.sigcor",  # Normalised strip response (West)
+    ],
+    root=SNTP_BR_STD,
+)
+
+IMAGE_TIME_VARIABLES: Final[VariableCollection] = VariableCollection(
+    variables=[
+        "stp.time0",  # Charge weighted mean time [s] (East)
+        "stp.time1",  # Charge weighted mean time [s] (West)
+    ],
+    root=SNTP_BR_STD,
+)
+
+IMAGE_ALL_VARIABLES: Final[VariableCollection] = (
     IMAGE_BASIC_VARIABLES
     + IMAGE_PE_VARIABLES
     + IMAGE_SIGCOR_VARIABLES
     + IMAGE_TIME_VARIABLES
+)
+
+EVENT_VERTEX_VARIABLES: Final[VariableCollection] = VariableCollection(
+    variables=[
+        "evt.vtx.x",  # Event vertex x-coordinate [m]
+        "evt.vtx.y",  # Event vertex y-coordinate [m]
+        "evt.vtx.z",  # Event vertex z-coordinate [m]
+    ],
+    root=SNTP_BR_STD,
+)
+
+MC_4MOMENTUM_VARIABLES: Final[VariableCollection] = VariableCollection(
+    variables=[
+        "mc.p4neunoosc[4]",  # Neutrino 4-momentum
+        "mc.p4mu1[4]",  # Primary muon 4-momentum
+        "mc.p4shw[4]",  # Hadronic shower 4-momentum
+    ],
+    root=SNTP_BR_STD,
+)
+
+MC_INTERACTION_VARIABLES: Final[VariableCollection] = VariableCollection(
+    variables=[
+        "mc.iaction",  # Interaction type (CC / NC)
+        "mc.inunoosc",  # Interacting neutrino PDG code
+    ],
+    root=SNTP_BR_STD,
 )
 
 # ================================ [ Enums  ] ================================ #
@@ -135,6 +299,10 @@ class _BaseEnum(Enum):
     [ Internal ] Base class for all Enums in the package.
     """
 
+    @property
+    def latex(self) -> str:
+        return "< ? >"
+
     def __str__(self) -> str:
         return self.name.replace("_", " ").title()
 
@@ -143,6 +311,10 @@ class _BaseEnum(Enum):
 
 
 class EIAction(_BaseEnum):
+    """\
+    Neutrino Interaction Types (Neutral / Charged Current)
+    """
+
     NC = 0
     CC = 1
     UNKNOWN = -1
@@ -153,6 +325,10 @@ class EIAction(_BaseEnum):
 
 
 class EIResonance(_BaseEnum):
+    """\
+    Neutrino Interaction Types (Resonance)
+    """
+
     QES = 1001  # Quasi-Elastic Scattering
     RES = 1002  # Resonance Production
     DIS = 1003  # Deep Inelastic Scattering
@@ -161,6 +337,10 @@ class EIResonance(_BaseEnum):
 
 
 class EIdHEP(_BaseEnum):
+    """\
+    Particle ID Codes (PDG Codes)
+    """
+
     PHOTON = 22
     ELECTRON = 11
     MUON = 13
@@ -219,8 +399,57 @@ class EInteraction(_BaseEnum):
     # Unknown
     UNKNOWN = -1
 
+    @property
+    def latex(self) -> str:
+        return {
+            self.NUECC: r"$\nu_\text{e}$ CC",
+            self.NUMUCC: r"$\nu_\mu$ CC",
+            self.NUTAUCC: r"$\nu_\tau$ CC",
+            self.ANTINUECC: r"$\bar{\nu}_e$ CC",
+            self.ANTINUMUCC: r"$\bar{\nu}_\mu$ CC",
+            self.ANTINUTAUCC: r"$\bar{\nu}_\tau$ CC",
+            self.NC: r"NC",
+        }.get(self, r"< ? >")
+
     @classmethod
     def _missing_(cls, value: object) -> EInteraction:
+        return cls(cls.UNKNOWN)
+
+
+class ESimpleInteraction(_BaseEnum):
+    """\
+    Simplified Interaction Codes
+
+    Note
+    ----
+    The simplified interaction codes are calculated by taking the absolute
+    value of the product of "mc.iaction" and "stdhep.IdHEP". The "mc.iaction"
+    is the true interaction (either CC or NC) and the "stdhep.IdHEP" column is
+    the interacting neutrino (NuE, NuMu, NuTau, or their anti-particles).
+    """
+
+    # CC Interactions
+    NUECC = abs(EIdHEP.ELECTRON_NU.value)
+    NUMUCC = abs(EIdHEP.MUON_NU.value)
+    NUTAUCC = abs(EIdHEP.TAU_NU.value)
+
+    # NC Interactions
+    NC = 0
+
+    # Unknown
+    UNKNOWN = -1
+
+    @property
+    def latex(self) -> str:
+        return {
+            self.NUECC: r"$\stackrel{(\rule{0.8em}{0.4pt})}{\nu}_\text{e}$ CC",
+            self.NUMUCC: r"$\stackrel{(\rule{0.8em}{0.4pt})}{\nu}_\mu$ CC",
+            self.NUTAUCC: r"$\stackrel{(\rule{0.8em}{0.4pt})}{\nu}_\tau$ CC",
+            self.NC: r"NC",
+        }.get(self, r"< ? >")
+
+    @classmethod
+    def _missing_(cls, value: object) -> ESimpleInteraction:
         return cls(cls.UNKNOWN)
 
 
