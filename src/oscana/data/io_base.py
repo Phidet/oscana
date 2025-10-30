@@ -12,7 +12,7 @@ from __future__ import annotations
 
 __all__ = []
 
-from typing import TYPE_CHECKING, TypeAlias, TypeVar, Protocol, Generic
+from typing import TYPE_CHECKING, TypeAlias, TypeVar, Protocol, Generic, Literal
 
 import logging
 from pathlib import Path
@@ -31,6 +31,8 @@ if TYPE_CHECKING:
 TCov = TypeVar("TCov", covariant=True)
 TCon = TypeVar("TCon", contravariant=True)
 
+LoadedDataType: TypeAlias = tuple[TCov, list[FileMetadata], TransformMetadata]
+
 
 class LoaderFuncType(Protocol, Generic[TCov]):
     """\
@@ -44,8 +46,8 @@ class LoaderFuncType(Protocol, Generic[TCov]):
     """
 
     def __call__(
-        self, variables: list[str], files: list[str]
-    ) -> tuple[TCov, list[FileMetadata], TransformMetadata | None]: ...
+        self, variables: list[str], files: list[str | Path]
+    ) -> LoadedDataType[TCov]: ...
 
 
 class WriterFuncType(Protocol, Generic[TCon]):
@@ -62,21 +64,24 @@ class WriterFuncType(Protocol, Generic[TCon]):
     def __call__(
         self,
         data: TCon,
+        cuts: TCon | None,
         file_metadata: list[FileMetadata],
         transform_metadata: TransformMetadata,
-        file: str | Path,
+        file_path: str | Path,
+        compression: str | None = None,
     ) -> None: ...
 
-
-LoadedDataType: TypeAlias = tuple[
-    TCov, list[FileMetadata], TransformMetadata | None
-]
 
 # =============================== [ Logging  ] =============================== #
 
 _logger = logging.getLogger("Root")
 
 # =========================== [ Helper Functions ] =========================== #
+
+
+# TODO: This is not a great implementation. This will make a note of a file even
+#       if it is loaded incorrectly! All this needs to be changed so that if
+#       there was an error when loading, we do not "cache" the file.
 
 
 def _get_non_cache_files(cache: list[str], files: list[str]) -> list[str]:
@@ -176,13 +181,13 @@ class DataIOStrategy(ABC, Generic[TCov]):  # Can't use the cool 3.12 syntax :(
         pass
 
     @abstractmethod
-    def _from_hdf5(self, files: list[str]) -> None:
+    def _from_hdf5(self, files: list[str | Path]) -> None:
         """\
         [ Internal ] Import data from HDF5 files.
 
         Parameters
         ----------
-        files : list[str]
+        files : list[str | Path]
             List of names of the HDF5 files.
         """
         pass
@@ -196,6 +201,30 @@ class DataIOStrategy(ABC, Generic[TCov]):  # Can't use the cool 3.12 syntax :(
         -------
         int
             The length of the data table.
+        """
+        pass
+
+    @abstractmethod
+    def get_cuts_length(self) -> int:
+        """\
+        Get the length of the cuts table.
+
+        Returns
+        -------
+        int
+            The length of the cuts table.
+        """
+        pass
+
+    @abstractmethod
+    def get_n_variables(self) -> int:
+        """\
+        Get the number of variables in the data and cuts table.
+
+        Returns
+        -------
+        int
+            Number of variables in the data and cuts table.
         """
         pass
 
@@ -233,7 +262,7 @@ class DataIOStrategy(ABC, Generic[TCov]):  # Can't use the cool 3.12 syntax :(
         The names of the files should be from the environment variables (i.e. 
         the '.env' file).
         """
-        files = _get_non_cache_files(self._cache, files)
+        files = _get_non_cache_files(cache=self._cache, files=files)
 
         if not files:
             return
@@ -254,7 +283,7 @@ class DataIOStrategy(ABC, Generic[TCov]):  # Can't use the cool 3.12 syntax :(
         The names of the files should be from the environment variables (i.e.
         the '.env' file).
         """
-        files = _get_non_cache_files(self._cache, files)
+        files = _get_non_cache_files(cache=self._cache, files=files)
 
         if not files:
             return
@@ -275,14 +304,37 @@ class DataIOStrategy(ABC, Generic[TCov]):  # Can't use the cool 3.12 syntax :(
         The names of the files should be from the environment variables (i.e.
         the '.env' file).
         """
-        files = _get_non_cache_files(self._cache, files)
+        files = _get_non_cache_files(cache=self._cache, files=files)
 
         if not files:
             return
 
-        return self._from_hdf5(files=files)
+        return self._from_hdf5(
+            files=files  # pyright: ignore[reportArgumentType]
+        )
 
-    def to_hdf5(self, file: str | Path) -> None:
+    def to_hdf5(
+        self,
+        file: str | Path,
+        compression: Literal["gzip", "lzf"] | None = None,
+    ) -> None:
+        """\
+        Write the data table to an HDF5 file.
+
+        Parameters
+        ----------
+        file : str | Path
+            The name of the HDF5 file to write to.
+
+        compression : Literal["gzip", "lzf"] | None
+            The compression algorithm to use. If `None`, no compression is used.
+            Default is `None`.
+
+        Notes
+        -----
+        Compression algorithms supported by `h5py` include: "gzip", "lzf", and 
+        "szip". However, "szip" is not supported due to licensing.
+        """
         _error(
             NotImplementedError,
             "The HDF5 writer is not implemented yet!",
@@ -290,10 +342,7 @@ class DataIOStrategy(ABC, Generic[TCov]):  # Can't use the cool 3.12 syntax :(
         )
 
     def __str__(self) -> str:
-        return (
-            f"oscana.{self.__class__.__name__}("
-            f"parent={self._parent.__class__.__name__})"
-        )
+        return f"oscana.{self.__class__.__name__}()"
 
     def __repr__(self) -> str:
         return str(self)
