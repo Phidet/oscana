@@ -56,10 +56,10 @@ _logger = logging.getLogger("Root")
 
 minos_numbers: Final[dict[str, Any]] = {}  # Not exactly a constant! :P
 
-_SUPPORTED_FILE_TYPES: Final[tuple[str]] = ("sntp_std",)
+_SUPPORTED_FILE_TYPES: Final[tuple[str, ...]] = ("sntp_std", "sntp_fit")
 
 _DynamicFuncPrefix: TypeAlias = Literal["hlp_", "cut_", "tfm_"]
-_FileType: TypeAlias = LiteralExt["sntp_std"]
+_FileType: TypeAlias = LiteralExt["sntp_std", "sntp_fit"]
 
 # ============================== [ Functions  ] ============================== #
 
@@ -174,7 +174,7 @@ def _get_dir_from_env(file: str) -> Path:
     Parameters
     ----------
     file : str
-        The file name.
+        The file name to get from the enviornment variables.
 
     Returns
     -------
