@@ -25,7 +25,12 @@ oscana.init()
 
 from __future__ import annotations
 
-__version__ = "1.0.8"
+# Note: Version numbers now (30/10/2025) follow the Semantic Versioning scheme:
+#
+#           "{MAJOR}.{MINOR}.{PATCH}"
+#
+
+__version__ = "5.0.0"
 
 from .constants import *
 from .errors import *
@@ -59,16 +64,35 @@ def print_version(fancy: bool = False) -> None:
     fancy : bool, optional
         Whether to print the version in a fancy format. Defaults to `False`.
     """
-    basic_text = f"Oscana (v{__version__})"
+    from .escape import Style
+
+    description = "Neutrino Oscillation Analysis Package."
+    basic_text = f"Oscana (v{__version__}) - {description}"
 
     if not fancy:
         return print(basic_text)
 
-    text = f"{basic_text} - Neutrino Oscillation Analysis Package."
+    fancy_text = (
+        Style.BD
+        + (Style.FG[255] + Style.BG[208] + " ")
+        + (Style.FG[255] + Style.BG[208] + "O")
+        + (Style.FG[255] + Style.BG[209] + "s")
+        + (Style.FG[255] + Style.BG[210] + "c")
+        + (Style.FG[255] + Style.BG[211] + "a")
+        + (Style.FG[255] + Style.BG[212] + "n")
+        + (Style.FG[255] + Style.BG[213] + "a")
+        + (Style.FG[255] + Style.BG[213] + " ")
+        + Style.R
+        + Style.BD
+        + f" (v{__version__})"
+        + Style.R
+    )
 
-    print("\n+" + "-" * (len(text) + 2) + "+")
-    print("| " + text + " |")
-    print("+" + "-" * (len(text) + 2) + "+\n")
+    fancy_text = f"{fancy_text} - {Style.IT + description + Style.R}"
+
+    print("\n+" + "-" * (len(basic_text) + 2 + 2) + "+")
+    print("| " + fancy_text + " |")
+    print("+" + "-" * (len(basic_text) + 2 + 2) + "+\n")
 
 
 def init(
