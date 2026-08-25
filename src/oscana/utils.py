@@ -27,9 +27,8 @@ from typing import (
     Callable,
     Final,
     ClassVar,
-    Self,
 )
-from typing_extensions import Literal as LiteralExt
+from typing_extensions import Literal as LiteralExt, Self
 
 import os, platform, json, re
 from importlib import import_module
