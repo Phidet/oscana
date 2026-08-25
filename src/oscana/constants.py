@@ -239,7 +239,7 @@ HEADER_VARIABLES: Final[VariableCollection] = VariableCollection(
 
 IMAGE_BASIC_VARIABLES: Final[VariableCollection] = VariableCollection(
     variables=[
-        "stp.planeview",  # Plane view (see README: derivable from plane)
+        "stp.planeview",  # Plane view: 2 = U, 3 = V (PlaneView.h)
         "stp.strip",  # Strip number
         "stp.plane",  # Plane number
     ],
@@ -320,8 +320,8 @@ MC_TRUTH_EVENT_VARIABLES: Final[VariableCollection] = VariableCollection(
     variables=[
         "mc.itg",  # PDG code of the struck target
         "mc.iresonance",  # Interaction channel (QE / RES / DIS / CPP / IMD)
-        "mc.istruckq",  # Struck-quark code, DIS only (encoding unconfirmed)
-        "mc.iflags",  # Interaction flag bitmask (encoding unconfirmed)
+        "mc.istruckq",  # PDG id of the struck quark (0 none, 1 d, 2 u)
+        "mc.iflags",  # Hadronisation model, not a bitmask -- see README
         "mc.x",  # Bjorken x
         "mc.y",  # Inelasticity y
         "mc.q2",  # Four-momentum transfer squared (negative / spacelike)
@@ -329,10 +329,10 @@ MC_TRUTH_EVENT_VARIABLES: Final[VariableCollection] = VariableCollection(
         "mc.sigma",  # Cross section (units unconfirmed)
         "mc.sigmadiff",  # Differential cross section (formula unconfirmed)
         "mc.emfrac",  # EM fraction of the hadronic shower energy
-        "mc.ndigu",  # Total digits, u-view
-        "mc.ndigv",  # Total digits, v-view
-        "mc.tphu",  # Summed pulse height, u-view (units unconfirmed)
-        "mc.tphv",  # Summed pulse height, v-view (units unconfirmed)
+        "mc.ndigu",  # Truth-matched raw digits, u-view (not reco strips)
+        "mc.ndigv",  # Truth-matched raw digits, v-view (not reco strips)
+        "mc.tphu",  # Summed pulse height, u-view [raw ADC, pedestal-sub]
+        "mc.tphv",  # Summed pulse height, v-view [raw ADC, pedestal-sub]
     ],
     root=SNTP_BR_STD,
 )
