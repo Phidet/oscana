@@ -33,6 +33,8 @@ __all__ = [
     "EVENT_VERTEX_VARIABLES",
     "MC_4MOMENTUM_VARIABLES",
     "MC_INTERACTION_VARIABLES",
+    "MC_TRUTH_EVENT_VARIABLES",
+    "MC_PARTICLE_VARIABLES",
     # Enums
     "EIAction",
     "EIResonance",
@@ -95,6 +97,9 @@ SNTP_VR_EVT_UTC: Final[str] = (
 
 # ====================== [ SNTP Variable Collections  ] ====================== #
 
+# See README.md (this directory) for what each variable means, which are
+# left out and why, and which `mc.*` fields duplicate the particle table.
+
 
 class VariableCollection(list):
     """\
@@ -147,6 +152,13 @@ class VariableCollection(list):
             return list(self)
 
         return [f"{self._root}/{var}" for var in self]
+
+    @property
+    def list(self) -> list[str]:
+        """\
+        The variable names as a plain `list`, with no ROOT branch prefix.
+        """
+        return list(self)
 
     def __add__(self, other: object) -> "VariableCollection":
         if isinstance(other, VariableCollection):
@@ -220,14 +232,14 @@ HEADER_VARIABLES: Final[VariableCollection] = VariableCollection(
         "fRun",  # Run number
         "fSubRun",  # Subrun number
         "fSnarl",  # Snarl number
-        "fEvent",  # Event number
+        "fEvent",  # Event number (constant -1 in files checked so far)
     ],
     root=SNTP_BR_STD,
 )
 
 IMAGE_BASIC_VARIABLES: Final[VariableCollection] = VariableCollection(
     variables=[
-        "stp.planeview",  # Plane view
+        "stp.planeview",  # Plane view (see README: derivable from plane)
         "stp.strip",  # Strip number
         "stp.plane",  # Plane number
     ],
@@ -277,8 +289,21 @@ EVENT_VERTEX_VARIABLES: Final[VariableCollection] = VariableCollection(
 MC_4MOMENTUM_VARIABLES: Final[VariableCollection] = VariableCollection(
     variables=[
         "mc.p4neunoosc[4]",  # Neutrino 4-momentum
-        "mc.p4mu1[4]",  # Primary muon 4-momentum
+        "mc.p4mu1[4]",  # Primary muon 4-momentum (note: energy sign quirk)
         "mc.p4shw[4]",  # Hadronic shower 4-momentum
+    ],
+    root=SNTP_BR_STD,
+)
+
+# MC truth particle stack: one row per particle, variable length per event.
+# Note the `IstHEP == 999` terminator row -- see README.md.
+MC_PARTICLE_VARIABLES: Final[VariableCollection] = VariableCollection(
+    variables=[
+        "stdhep.IdHEP",  # PDG code
+        "stdhep.IstHEP",  # HEPEVT/GENIE status code
+        "stdhep.mass",  # Rest mass [GeV]
+        "stdhep.p4[4]",  # 4-momentum: (px, py, pz) [GeV], energy [GeV]
+        "stdhep.vtx[4]",  # Production 4-position: (x, y, z) [m], time
     ],
     root=SNTP_BR_STD,
 )
@@ -287,6 +312,27 @@ MC_INTERACTION_VARIABLES: Final[VariableCollection] = VariableCollection(
     variables=[
         "mc.iaction",  # Interaction type (CC / NC)
         "mc.inunoosc",  # Interacting neutrino PDG code
+    ],
+    root=SNTP_BR_STD,
+)
+
+MC_TRUTH_EVENT_VARIABLES: Final[VariableCollection] = VariableCollection(
+    variables=[
+        "mc.itg",  # PDG code of the struck target
+        "mc.iresonance",  # Interaction channel (QE / RES / DIS / CPP / IMD)
+        "mc.istruckq",  # Struck-quark code, DIS only (encoding unconfirmed)
+        "mc.iflags",  # Interaction flag bitmask (encoding unconfirmed)
+        "mc.x",  # Bjorken x
+        "mc.y",  # Inelasticity y
+        "mc.q2",  # Four-momentum transfer squared (negative / spacelike)
+        "mc.w2",  # Hadronic invariant mass squared [GeV^2]
+        "mc.sigma",  # Cross section (units unconfirmed)
+        "mc.sigmadiff",  # Differential cross section (formula unconfirmed)
+        "mc.emfrac",  # EM fraction of the hadronic shower energy
+        "mc.ndigu",  # Total digits, u-view
+        "mc.ndigv",  # Total digits, v-view
+        "mc.tphu",  # Summed pulse height, u-view (units unconfirmed)
+        "mc.tphv",  # Summed pulse height, v-view (units unconfirmed)
     ],
     root=SNTP_BR_STD,
 )
