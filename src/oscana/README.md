@@ -118,6 +118,74 @@ the struck target, and everything in the final state.
 a null placeholder never tracked. LOON strips them too (`HepevtModule`'s
 `DropStatus999`). Filter `IstHEP != 999` before particle-level physics.
 
+## `MC_STRIP_TRUTH_VARIABLES`
+
+Truth for each strip in `IMAGE_*`: which simulated particles deposited
+energy there, and in what proportion. Exactly one record per hit, so it
+lines up row-for-row with the hit variables.
+
+| Variable | Meaning |
+|----------|---------|
+| `thstp.neumc` | Index of the interaction (`mc` record) responsible for the strip. |
+| `thstp.nneu` | How many interactions contributed to it. |
+| `thstp.sigflg` | Signal flag. |
+| `thstp.stdhep[3]` | Up to three contributing `stdhep` particle indices. |
+| `thstp.phfrac[3]` | Fraction of the strip's pulse height from each of those. |
+
+## `DETECTOR_STATE_VARIABLES`
+
+Conditions rather than event data — constant within a file, but needed to
+interpret it.
+
+| Variable | Meaning |
+|----------|---------|
+| `calstatus.gevpermip` | Calibration constant converting MIP-equivalent signal to GeV. Needed to turn the `pe` values into energy. |
+| `detstatus.coilcurrent1` | Magnet coil current, which sets the field and hence momentum and charge-sign measurement. |
+| `detstatus.coilcurrent2` | Second coil current reading. |
+| `detstatus.coilstatus` | Magnet on/off and polarity. |
+| `detstatus.dcscoilstatus` | The same, as reported by the slow-control system. |
+| `detstatus.dbuhvstatus` | Photomultiplier high-voltage status. |
+
+## `DAQ_CONTEXT_VARIABLES`
+
+Beam, trigger and absolute-timing context for the snarl.
+
+**Unset (`-1`) throughout the Monte Carlo files checked** — spill and
+trigger information only exists for real data. Requesting these from an MC
+file yields sentinels rather than an error.
+
+| Variable | Meaning |
+|----------|---------|
+| `dataquality.spillstatus` | Beam spill status. |
+| `dataquality.spilltype` | Beam spill type. |
+| `dataquality.spilltimeerror` | Spill timing error. |
+| `dataquality.trigsource` | What triggered the readout. |
+| `dataquality.trigtime` | Trigger time. |
+| `dataquality.snarlmultiplicity` | Interactions in this snarl. |
+| `dataquality.errorcode` | DAQ error code. |
+| `timestatus.sgate_10mhz` | Spill gate on the 10 MHz clock. |
+| `timestatus.sgate_53mhz` | Spill gate on the 53 MHz clock. |
+| `timestatus.rollover_53mhz` | 53 MHz counter rollovers. |
+| `timestatus.crate_t0_ns` | Crate time zero [ns]. |
+| `timestatus.timeframe` | Time frame number. |
+
+## `VETO_SHIELD_VARIABLES`
+
+Raw hits in the veto shield — a separate scintillator subsystem around the
+Far Detector used to tag cosmic-ray muons. Detector data, not
+reconstruction. Sparse: about 3% of snarls have any.
+
+| Variable | Meaning |
+|----------|---------|
+| `vetostp.pln` | Shield plane. |
+| `vetostp.plank` | Shield plank within the plane. |
+| `vetostp.x` | Position [m]. |
+| `vetostp.y` | Position [m]. |
+| `vetostp.z[2]` | Position at each strip end [m]. |
+| `vetostp.adc[2]` | Raw pulse height at each end [ADC]. |
+| `vetostp.time[2]` | Hit time at each end. |
+| `vetostp.ndigit` | Digits on this shield strip. |
+
 ## Not included
 
 Fields inside branches that are otherwise read.
@@ -167,24 +235,19 @@ Whole branch groups that are not used.
 | `shw` | Reconstructed showers. |
 | `slc` | Reconstructed slices. |
 | `clu` | Clusters, upstream of track and shower fitting. |
-| `evt` | Reconstructed events — bar the vertex, kept above. |
+| `evt` | Reconstructed events — bar the vertex, kept above but excluded from archival defaults. |
 | `thevt` | Reco↔truth matching for events; meaningless without the reco object. |
 | `thtrk` | Likewise for tracks. |
 | `thshw` | Likewise for showers. |
 | `thslc` | Likewise for slices. |
 | `thstp` | Likewise for strips. |
-| `crhdr` | Cosmic-ray header. |
-| `vetohdr` | Veto shield header. |
-| `vetostp` | Veto shield strips. |
-| `vetoexp` | Veto shield expected-hit information. |
-| `calstatus` | Calibration status. |
-| `detstatus` | Detector status. |
-| `timestatus` | Timing status. |
-| `dataquality` | Data-quality flags. |
-| `dmxstatus` | Demultiplexer status. |
-| `deadchips` | Dead-electronics map. |
+| `crhdr` | Cosmic-ray zenith/azimuth and sky coordinates, derived from reconstructed tracks. |
+| `vetohdr` | Veto shield summary; the raw hits are kept, see `VETO_SHIELD_VARIABLES`. |
+| `vetoexp` | Where a *reconstructed track* was expected to cross the shield — reco projection, unlike `vetostp` above. |
+| `dmxstatus` | Demultiplexing quality; demultiplexing is a reconstruction step. |
+| `deadchips` | Which channels were dead — genuinely useful for efficiency, but **empty in every file checked**, so there is nothing to keep. |
 | `detsim` | Hits and digits surviving each simulation stage. |
 | `photon` | Photon-counting QA. |
 | `mchdr` | Generator codename, host and timestamp. |
-| `evthdr` | Header summary counts, partly reco-derived. |
-| `digihit` | Per-digit truth, one tier below the `stdhep` stack. |
+| `evthdr` | Counts of reconstructed objects per snarl. |
+| `digihit` | Per particle per strip: entry and exit point, path length. The finest-grained truth there is — but **empty in every file checked**, so there is nothing to keep. |

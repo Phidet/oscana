@@ -35,6 +35,10 @@ __all__ = [
     "MC_INTERACTION_VARIABLES",
     "MC_TRUTH_EVENT_VARIABLES",
     "MC_PARTICLE_VARIABLES",
+    "MC_STRIP_TRUTH_VARIABLES",
+    "DETECTOR_STATE_VARIABLES",
+    "DAQ_CONTEXT_VARIABLES",
+    "VETO_SHIELD_VARIABLES",
     # Enums
     "EIAction",
     "EIResonance",
@@ -333,6 +337,75 @@ MC_TRUTH_EVENT_VARIABLES: Final[VariableCollection] = VariableCollection(
         "mc.ndigv",  # Truth-matched raw digits, v-view (not reco strips)
         "mc.tphu",  # Summed pulse height, u-view [raw ADC, pedestal-sub]
         "mc.tphv",  # Summed pulse height, v-view [raw ADC, pedestal-sub]
+    ],
+    root=SNTP_BR_STD,
+)
+
+# Truth for each strip in `IMAGE_*`: which simulated particles put energy
+# there and in what proportion. Truth information rather than reconstruction
+# output, and exactly parallel to the hits -- one record per strip.
+MC_STRIP_TRUTH_VARIABLES: Final[VariableCollection] = VariableCollection(
+    variables=[
+        "thstp.neumc",  # Index of the interaction (mc record) responsible
+        "thstp.nneu",  # Number of interactions contributing to the strip
+        "thstp.sigflg",  # Signal flag
+        "thstp.stdhep[3]",  # Up to 3 contributing stdhep particle indices
+        "thstp.phfrac[3]",  # Pulse-height fraction from each of those
+    ],
+    root=SNTP_BR_STD,
+)
+
+# Detector conditions. Constant within a file, but needed to interpret it:
+# the coil current sets the magnetic field, and gevpermip converts the
+# pulse heights in `IMAGE_PE_VARIABLES` into energy.
+DETECTOR_STATE_VARIABLES: Final[VariableCollection] = VariableCollection(
+    variables=[
+        "calstatus.gevpermip",  # MIP -> GeV calibration constant
+        "detstatus.coilcurrent1",  # Magnet coil current
+        "detstatus.coilcurrent2",  # Second coil current reading
+        "detstatus.coilstatus",  # Magnet on/off/polarity
+        "detstatus.dcscoilstatus",  # Same, from the slow-control system
+        "detstatus.dbuhvstatus",  # Photomultiplier high-voltage status
+    ],
+    root=SNTP_BR_STD,
+)
+
+# Beam, trigger and absolute timing context for the snarl.
+#
+# Note: unset (-1) throughout the Monte Carlo files checked -- spill and
+# trigger information only exists for real data. Requesting these from an
+# MC file gives sentinels, not an error.
+DAQ_CONTEXT_VARIABLES: Final[VariableCollection] = VariableCollection(
+    variables=[
+        "dataquality.spillstatus",  # Beam spill status
+        "dataquality.spilltype",  # Beam spill type
+        "dataquality.spilltimeerror",  # Spill timing error
+        "dataquality.trigsource",  # What triggered the readout
+        "dataquality.trigtime",  # Trigger time
+        "dataquality.snarlmultiplicity",  # Interactions in this snarl
+        "dataquality.errorcode",  # DAQ error code
+        "timestatus.sgate_10mhz",  # Spill gate, 10 MHz clock
+        "timestatus.sgate_53mhz",  # Spill gate, 53 MHz clock
+        "timestatus.rollover_53mhz",  # 53 MHz counter rollovers
+        "timestatus.crate_t0_ns",  # Crate time zero [ns]
+        "timestatus.timeframe",  # Time frame number
+    ],
+    root=SNTP_BR_STD,
+)
+
+# Raw hits in the veto shield -- a separate scintillator subsystem above and
+# around the Far Detector, used to tag cosmic-ray muons. Detector data, not
+# reconstruction. Sparse: most snarls have none.
+VETO_SHIELD_VARIABLES: Final[VariableCollection] = VariableCollection(
+    variables=[
+        "vetostp.pln",  # Shield plane
+        "vetostp.plank",  # Shield plank within the plane
+        "vetostp.x",  # Position [m]
+        "vetostp.y",  # Position [m]
+        "vetostp.z[2]",  # Position at each strip end [m]
+        "vetostp.adc[2]",  # Raw pulse height at each end [ADC]
+        "vetostp.time[2]",  # Hit time at each end
+        "vetostp.ndigit",  # Digits on this shield strip
     ],
     root=SNTP_BR_STD,
 )
