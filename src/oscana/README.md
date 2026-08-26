@@ -235,15 +235,14 @@ Whole branch groups that are not used.
 | `shw` | Reconstructed showers. |
 | `slc` | Reconstructed slices. |
 | `clu` | Clusters, upstream of track and shower fitting. |
-| `evt` | Reconstructed events — bar the vertex, kept above but excluded from archival defaults. |
-| `thevt` | Reco↔truth matching for events; meaningless without the reco object. |
+| `evt` | Reconstructed events. The one exception is the vertex, `evt.vtx.*`, offered as `EVENT_VERTEX_VARIABLES` because analyses rely on it — but it is reconstruction output, so it stays out of archival defaults. |
+| `thevt` | Truth matching for reconstructed events. Unlike `thstp`, which labels the strips we keep, this is meaningless without the reco object it describes. |
 | `thtrk` | Likewise for tracks. |
 | `thshw` | Likewise for showers. |
 | `thslc` | Likewise for slices. |
-| `thstp` | Likewise for strips. |
 | `crhdr` | Cosmic-ray zenith/azimuth and sky coordinates, derived from reconstructed tracks. |
 | `vetohdr` | Veto shield summary; the raw hits are kept, see `VETO_SHIELD_VARIABLES`. |
-| `vetoexp` | Where a *reconstructed track* was expected to cross the shield — reco projection, unlike `vetostp` above. |
+| `vetoexp` | Where a *reconstructed track* was expected to cross the shield — a projection, not a measurement. The shield's actual hits are kept, see `VETO_SHIELD_VARIABLES`. |
 | `dmxstatus` | Demultiplexing quality; demultiplexing is a reconstruction step. |
 | `deadchips` | Which channels were dead — genuinely useful for efficiency, but **empty in every file checked**, so there is nothing to keep. |
 | `detsim` | Hits and digits surviving each simulation stage. |
