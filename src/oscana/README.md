@@ -245,8 +245,8 @@ Whole branch groups that are not used.
 | `vetoexp` | Where a *reconstructed track* was expected to cross the shield — a projection, not a measurement. The shield's actual hits are kept, see `VETO_SHIELD_VARIABLES`. |
 | `dmxstatus` | Demultiplexing quality; demultiplexing is a reconstruction step. |
 | `deadchips` | Which channels were dead — genuinely useful for efficiency, but **empty in every file checked**, so there is nothing to keep. |
-| `detsim` | Hits and digits surviving each simulation stage. |
-| `photon` | Photon-counting QA. |
+| `detsim` | Per-snarl counters from the electronics simulation: photoelectrons, pixels hit, cross-talk, and how many digits survived the front-end trigger, sparsification and DAQ trigger in turn. Again a record of the simulation's behaviour rather than the event's. |
+| `photon` | Per-snarl counters from the optical simulation: how many blue scintillation photons were made, how many green ones the wavelength-shifting fibre re-emitted, how many photoelectrons resulted, and how much was discarded. Both raw and prescale-corrected counts (simulating every photon is too slow, so a fraction is tracked and scaled up). Describes how the simulation ran, not what physically happened — the resulting light is already in `stp.ph*`. |
 | `mchdr` | Generator codename, host and timestamp. |
 | `evthdr` | Counts of reconstructed objects per snarl. |
 | `digihit` | Per particle per strip: entry and exit point, path length. The finest-grained truth there is — but **empty in every file checked**, so there is nothing to keep. |
