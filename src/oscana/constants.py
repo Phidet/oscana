@@ -39,6 +39,9 @@ __all__ = [
     "DETECTOR_STATE_VARIABLES",
     "DAQ_CONTEXT_VARIABLES",
     "VETO_SHIELD_VARIABLES",
+    "IMAGE_RAW_VARIABLES",
+    "MC_PARTICLE_LINEAGE_VARIABLES",
+    "MC_FLUX_VARIABLES",
     # Enums
     "EIAction",
     "EIResonance",
@@ -406,6 +409,131 @@ VETO_SHIELD_VARIABLES: Final[VariableCollection] = VariableCollection(
         "vetostp.adc[2]",  # Raw pulse height at each end [ADC]
         "vetostp.time[2]",  # Hit time at each end
         "vetostp.ndigit",  # Digits on this shield strip
+    ],
+    root=SNTP_BR_STD,
+)
+
+# Uncalibrated pulse height -- what the electronics actually recorded, as
+# opposed to `IMAGE_PE_VARIABLES`, which is MINOS's calibrated product.
+#
+# Deliberately NOT part of `IMAGE_ALL_VARIABLES`: adding it there would
+# silently enlarge every existing caller's read. Ask for it explicitly.
+#
+# Worth keeping alongside `pe` rather than instead of it. The conversion is
+# per-strip, so `pe` cannot be inverted -- but with both present the
+# calibration factor is recoverable from the data itself, which is what
+# makes re-calibration possible at all.
+IMAGE_RAW_VARIABLES: Final[VariableCollection] = VariableCollection(
+    variables=[
+        "stp.ph0.raw",  # Raw ADC, east end
+        "stp.ph1.raw",  # Raw ADC, west end
+    ],
+    root=SNTP_BR_STD,
+)
+
+# Particle genealogy: the decay chain behind each `stdhep` row.
+#
+# Not reconstructable from the particle kinematics alone -- a shared
+# production vertex identifies siblings at best, and chains such as
+# pi -> mu -> e span vertices. Needed to tell a primary lepton from a decay
+# product, and to study final-state interactions at all.
+MC_PARTICLE_LINEAGE_VARIABLES: Final[VariableCollection] = VariableCollection(
+    variables=[
+        "stdhep.parent[2]",  # Indices of the particle's parents
+        "stdhep.child[2]",  # Indices of its daughters
+        "stdhep.ndethit",  # Digits it deposited energy in
+    ],
+    root=SNTP_BR_STD,
+)
+
+# The gnumi beam-simulation record: where this neutrino came from, from the
+# primary proton through to its weight at each detector. Cannot be
+# regenerated without rerunning the NuMI beam simulation.
+#
+# See NtpMCFluxInfo.h in the MINOS offline source, which points in turn at
+# the gnumi ntuple documentation.
+MC_FLUX_VARIABLES: Final[VariableCollection] = VariableCollection(
+    variables=[
+        # Which gnumi beam-simulation event this neutrino came from.
+        "mc.flux.fluxrun",
+        "mc.flux.fluxevtno",
+        # The neutrino as generated: direction cosines, momentum, energy, flavour.
+        "mc.flux.ndxdz",
+        "mc.flux.ndydz",
+        "mc.flux.npz",
+        "mc.flux.nenergy",
+        "mc.flux.ntype",
+        # The same neutrino as it would appear at each detector, with the weight
+        # that turns generated events into a flux prediction there. This pair is
+        # what the near/far extrapolation is built from.
+        "mc.flux.ndxdznear",
+        "mc.flux.ndydznear",
+        "mc.flux.nenergynear",
+        "mc.flux.nwtnear",
+        "mc.flux.ndxdzfar",
+        "mc.flux.ndydzfar",
+        "mc.flux.nenergyfar",
+        "mc.flux.nwtfar",
+        # The decay that produced it: mode, where it happened, parent momentum.
+        "mc.flux.norig",
+        "mc.flux.ndecay",
+        "mc.flux.vx",
+        "mc.flux.vy",
+        "mc.flux.vz",
+        "mc.flux.pdpx",
+        "mc.flux.pdpy",
+        "mc.flux.pdpz",
+        "mc.flux.necm",
+        # The parent hadron itself -- type, momentum and where it was produced.
+        "mc.flux.ptype",
+        "mc.flux.ppdxdz",
+        "mc.flux.ppdydz",
+        "mc.flux.pppz",
+        "mc.flux.ppenergy",
+        "mc.flux.ppmedium",
+        "mc.flux.ppvx",
+        "mc.flux.ppvy",
+        "mc.flux.ppvz",
+        # If the parent was a muon, its momentum and energy.
+        "mc.flux.muparpx",
+        "mc.flux.muparpy",
+        "mc.flux.muparpz",
+        "mc.flux.mupare",
+        # The ancestry in the target: `tgen` counts how many hadronic
+        # interactions deep the chain goes, which hadron-production reweighting
+        # needs.
+        "mc.flux.tvx",
+        "mc.flux.tvy",
+        "mc.flux.tvz",
+        "mc.flux.tpx",
+        "mc.flux.tpy",
+        "mc.flux.tpz",
+        "mc.flux.tptype",
+        "mc.flux.tgen",
+        "mc.flux.tgptype",
+        "mc.flux.tgppx",
+        "mc.flux.tgppy",
+        "mc.flux.tgppz",
+        "mc.flux.tprivx",
+        "mc.flux.tprivy",
+        "mc.flux.tprivz",
+        # The primary proton beam that started it all (120 GeV at the Main
+        # Injector), and the ray-traced point used for the weights.
+        "mc.flux.beamx",
+        "mc.flux.beamy",
+        "mc.flux.beamz",
+        "mc.flux.beampx",
+        "mc.flux.beampy",
+        "mc.flux.beampz",
+        "mc.flux.xpoint",
+        "mc.flux.ypoint",
+        "mc.flux.zpoint",
+        # Importance weight from the beam simulation, then the overall flux
+        # weight with its uncertainty and the version that produced it.
+        "mc.flux.nimpwt",
+        "mc.fluxwgt.version",
+        "mc.fluxwgt.weight",
+        "mc.fluxwgt.weighterr",
     ],
     root=SNTP_BR_STD,
 )

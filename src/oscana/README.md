@@ -186,6 +186,66 @@ reconstruction. Sparse: about 3% of snarls have any.
 | `vetostp.time[2]` | Hit time at each end. |
 | `vetostp.ndigit` | Digits on this shield strip. |
 
+## `IMAGE_RAW_VARIABLES`
+
+Uncalibrated pulse height — what the electronics recorded, before any
+correction. `IMAGE_PE_VARIABLES` is the calibrated product derived from it.
+
+| Variable | Meaning |
+|----------|---------|
+| `stp.ph0.raw` | Raw ADC, east end. |
+| `stp.ph1.raw` | Raw ADC, west end. |
+
+Worth keeping *alongside* `pe` rather than instead of it. The conversion is
+per-strip — the `pe/raw` ratio takes ~10,000 distinct values in one file —
+so `pe` cannot be inverted on its own, and an archive holding only `pe` is
+locked into MINOS's calibration for good. With both present the factor is
+recoverable from the data itself.
+
+Deliberately **not** part of `IMAGE_ALL_VARIABLES`: adding it there would
+enlarge every existing caller's read without their asking.
+
+## `MC_PARTICLE_LINEAGE_VARIABLES`
+
+The decay chain behind each `stdhep` row.
+
+| Variable | Meaning |
+|----------|---------|
+| `stdhep.parent[2]` | Indices of the particle's parents. |
+| `stdhep.child[2]` | Indices of its daughters. |
+| `stdhep.ndethit` | How many digits it deposited energy in. |
+
+Not reconstructable from the particle kinematics: a shared production
+vertex identifies siblings at best, and chains such as π → μ → e span
+vertices. This is what separates a primary lepton from a decay product, and
+it is the only way to see final-state interactions in the record.
+
+## `MC_FLUX_VARIABLES`
+
+The gnumi beam-simulation record: where this neutrino came from, from the
+primary proton through to its weight at each detector. 65 fields, grouped
+below. None of it can be regenerated without rerunning the NuMI beam
+simulation.
+
+| Fields | What they hold |
+|--------|----------------|
+| `fluxrun`, `fluxevtno` | Which beam-simulation event this was. |
+| `ntype`, `nenergy`, `npz`, `ndxdz`, `ndydz` | The neutrino as generated: flavour, energy, direction. |
+| `nenergynear`, `nwtnear`, `ndxdznear`, `ndydznear` | The same neutrino as it would appear at the Near Detector, with the weight that turns generated events into a flux prediction there. |
+| `nenergyfar`, `nwtfar`, `ndxdzfar`, `ndydzfar` | The same for the Far Detector. Together with the near fields, this pair is what the near/far extrapolation is built from. |
+| `ndecay`, `norig`, `vx`, `vy`, `vz`, `pdpx`, `pdpy`, `pdpz`, `necm` | The decay that produced it: mode, where it happened, parent momentum. |
+| `ptype`, `pppz`, `ppenergy`, `ppdxdz`, `ppdydz`, `ppmedium`, `ppvx`, `ppvy`, `ppvz` | The parent hadron: type, momentum, and where it was produced. |
+| `muparpx`, `muparpy`, `muparpz`, `mupare` | The muon's momentum and energy, where the parent was a muon. |
+| `tgen`, `tptype`, `tgptype`, `tvx…tpz`, `tgppx…tgppz`, `tprivx…tprivz` | Ancestry in the target. `tgen` counts how many hadronic interactions deep the chain runs, which is what hadron-production reweighting needs. |
+| `beamx…beampz`, `xpoint`, `ypoint`, `zpoint` | The primary proton beam, and the ray-traced point used for the weights. |
+| `nimpwt`, `mc.fluxwgt.weight`, `weighterr`, `version` | Importance weight, then the overall flux weight with its uncertainty and the version that produced it. |
+
+Sanity checks against a real file: `beampz` peaks at 120 GeV, the Main
+Injector energy; decay vertices reach ~723 m, consistent with the 675 m
+decay pipe; `tgen` runs 2–6; and far-detector weights sit about five orders
+of magnitude below near-detector ones, as the solid angle at 735 km
+requires.
+
 ## Not included
 
 Fields inside branches that are otherwise read. Grouped by why.
@@ -231,35 +291,24 @@ file that breaks one is refused rather than silently stripped.
 | `stp.pmtindex1` | The same for the west end. |
 | `stp.demuxveto` | Output of demultiplexing, which resolves the Near Detector's several-strips-per-channel readout. Constant `0` in the Far Detector files here, and a reconstruction step in any case. |
 
-**Superseded by a later calibration stage.**
+**An intermediate calibration stage.**
 
 | Branch | Why |
 |--------|-----|
-| `stp.ph0.raw` | Uncalibrated ADC, east end — the input to the chain ending in `pe`, which is kept. Note this is *not* recoverable from `pe`: the conversion is per-strip, so keeping only `pe` forecloses re-calibrating later. |
-| `stp.ph1.raw` | The same, west end. |
-| `stp.ph0.siglin` | Intermediate stage between `raw` and `pe`, linearity-corrected but not yet attenuation-corrected. |
+| `stp.ph0.siglin` | Sits between `raw` and `pe`, linearity-corrected but not yet attenuation-corrected. Both endpoints of that chain are kept, and the factor between them is recoverable from the pair, so the middle step adds little. |
 | `stp.ph1.siglin` | The same, west end. |
 
-**Unset, or out of scope.**
+**Unset.**
 
 | Branch | Why |
 |--------|-----|
 | `mc.iboson` | Should carry the exchange boson's PDG code (Z⁰ = 23, W⁺ = 24) but holds a constant sentinel in every file checked. |
-| `mc.flux.*` | 65 fields describing how the parent hadron was produced in the NuMI target and where it decayed. Beam-simulation provenance rather than this interaction; needed for flux systematics, which this archive does not attempt to support. |
-| `mc.fluxwgt.*` | The reweighting factors that go with them. |
 
-**Truth that is genuinely dropped.**
-
-These are not redundant and not reconstruction — they are simulation truth
-that the archive does not currently keep. Listed plainly so the choice is
-visible rather than buried.
+**Truth dropped for a technical reason.**
 
 | Branch | Why |
 |--------|-----|
-| `stdhep.parent[2]` | Indices of a particle's parents — the decay chain. Real truth; dropped only because no analysis here has needed the genealogy. |
-| `stdhep.child[2]` | Its daughters, the same. |
-| `stdhep.ndethit` | How many digits the particle deposited energy in. Populated (0–489) even though `digihit` itself is empty. |
-| `stdhep.dethit[2]` | The particle's first and last hit in the detector — plane, strip, position and momentum for each. Populated, and the closest thing to per-particle trajectory truth available in these files. |
+| `stdhep.dethit[2]` | The particle's first and last hit — plane, strip, position and momentum for each, and the closest thing to per-particle trajectory truth in these files. It is populated. It is left out because uproot reads it as `AsObjects(Model_NtpMCStdHepHit)`, a C++ struct array rather than numbers: `ak.to_numpy` raises on it, so neither the loader nor the HDF5 writer can take it without struct unpacking that neither does. A real loss, recorded rather than dressed up as redundancy. |
 
 Whole branch groups that are not used.
 
