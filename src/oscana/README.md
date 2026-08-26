@@ -188,44 +188,78 @@ reconstruction. Sparse: about 3% of snarls have any.
 
 ## Not included
 
-Fields inside branches that are otherwise read.
+Fields inside branches that are otherwise read. Grouped by why.
+
+**Recoverable from what is kept.**
 
 | Branch | Why |
 |--------|-----|
-| `stp.z` | One fixed z per plane, so a lookup on `stp.plane` — though not a linear formula, since the Far Detector has a gap between its two supermodules. |
-| `stp.ph0.raw` | Earlier calibration stage than `pe` (ADC counts), east end. |
-| `stp.ph1.raw` | Same, west end. |
-| `stp.ph0.siglin` | Nonlinearity-corrected stage, before `pe`, east end. |
-| `stp.ph1.siglin` | Same, west end. |
-| `stp.tpos` | Transverse position; follows from `plane` + `strip`. |
-| `stp.pmtindex0` | Electronics channel address, east end. |
-| `stp.pmtindex1` | Same, west end. |
-| `stp.index` | Index of the strip within its own array. |
-| `stp.ndigit` | Number of digits on the strip. |
-| `stp.demuxveto` | Flag from demultiplexing (the Near Detector reads several strips into one channel). |
-| `mc.inu` | The `stdhep` initial-state neutrino row (`status == 0`). |
-| `mc.iboson` | Should hold the exchange boson PDG (Z0=23, W+=24) but is an unset sentinel in every file checked. |
-| `mc.a` | Decodes from the `stdhep` nucleus row's PDG code. |
-| `mc.z` | Likewise. Not Bjorken z, and not a position. |
-| `mc.vtxx` | The `stdhep` neutrino row's `vtx[0]`. |
-| `mc.vtxy` | Its `vtx[1]`. |
-| `mc.vtxz` | Its `vtx[2]`. |
-| `mc.p4neu[4]` | The `stdhep` neutrino row's `p4`. |
-| `mc.p4tgt[4]` | The `stdhep` struck-nucleon or nucleus row's `p4`. |
-| `mc.p4mu2[4]` | A second `stdhep` muon row, where one exists. |
-| `mc.p4el1[4]` | An `stdhep` electron row. |
-| `mc.p4el2[4]` | A second `stdhep` electron row. |
-| `mc.p4tau[4]` | An `stdhep` tau row. No ντ events in any file checked. |
-| `mc.index` | Index of the record within the `mc` array. |
-| `mc.stdhep[2]` | Index range into `stdhep` — redundant once joined per event. |
-| `mc.flux.*` | Beamline provenance — how the parent particle was made and where it decayed, ~60 fields; for flux systematics. |
-| `mc.fluxwgt.*` | Flux reweighting factors, likewise. |
-| `stdhep.index` | Index of the particle within its own array. |
-| `stdhep.mc` | Back-index to the interaction record. |
-| `stdhep.parent[2]` | Genealogy: parent particles. |
-| `stdhep.child[2]` | Genealogy: daughter particles. |
-| `stdhep.ndethit` | Number of digits this particle deposited in. |
-| `stdhep.dethit[2]` | Which digits those were. |
+| `stp.z` | One fixed z per plane, so a lookup on `stp.plane`. Not a linear formula — the Far Detector has a gap between its two supermodules. |
+| `stp.tpos` | Transverse position, fixed by `plane` and `strip` together. |
+| `stp.ndigit` | Only ever 1 or 2: how many ends of the strip fired. The same information as which of `time0`/`time1` holds the `-999999` sentinel. |
+| `mc.inu` | Duplicates the PDG code on the `stdhep` initial-state neutrino row (`IstHEP == 0`). |
+| `mc.a` | The target nucleus's mass number, encoded in the PDG code of the `stdhep` nucleus row. Hydrogen when there is no such row. |
+| `mc.z` | Its atomic number, from the same code. Not Bjorken z, and not a position. |
+| `mc.vtxx` | Duplicates `vtx[0]` on the `stdhep` neutrino row. |
+| `mc.vtxy` | Duplicates its `vtx[1]`. |
+| `mc.vtxz` | Duplicates its `vtx[2]`. |
+| `mc.p4neu[4]` | Duplicates `p4` on the `stdhep` neutrino row. |
+| `mc.p4tgt[4]` | Duplicates `p4` on the `stdhep` struck-nucleon or nucleus row. |
+| `mc.p4mu2[4]` | Duplicates a second `stdhep` muon row, where the event has one. |
+| `mc.p4el1[4]` | Duplicates an `stdhep` electron row. |
+| `mc.p4el2[4]` | Duplicates a second one. |
+| `mc.p4tau[4]` | Duplicates an `stdhep` tau row. Never non-zero in any file checked — no ντ events. |
+
+Each duplication is re-checked per file before anything is dropped, so a
+file that breaks one is refused rather than silently stripped.
+
+**Array bookkeeping — meaningless once loaded.**
+
+| Branch | Why |
+|--------|-----|
+| `stp.index` | Position of the strip in its array; row order already carries it. |
+| `mc.index` | Likewise for the interaction record. |
+| `stdhep.index` | Likewise for the particle. |
+| `mc.stdhep[2]` | Index range pointing into `stdhep`; both are already joined per event. |
+| `stdhep.mc` | The same pointer in reverse. |
+
+**Detector hardware, not event data.**
+
+| Branch | Why |
+|--------|-----|
+| `stp.pmtindex0` | Which photomultiplier channel the east end is wired to. Fixed per strip, and a property of the readout map rather than the event. |
+| `stp.pmtindex1` | The same for the west end. |
+| `stp.demuxveto` | Output of demultiplexing, which resolves the Near Detector's several-strips-per-channel readout. Constant `0` in the Far Detector files here, and a reconstruction step in any case. |
+
+**Superseded by a later calibration stage.**
+
+| Branch | Why |
+|--------|-----|
+| `stp.ph0.raw` | Uncalibrated ADC, east end — the input to the chain ending in `pe`, which is kept. Note this is *not* recoverable from `pe`: the conversion is per-strip, so keeping only `pe` forecloses re-calibrating later. |
+| `stp.ph1.raw` | The same, west end. |
+| `stp.ph0.siglin` | Intermediate stage between `raw` and `pe`, linearity-corrected but not yet attenuation-corrected. |
+| `stp.ph1.siglin` | The same, west end. |
+
+**Unset, or out of scope.**
+
+| Branch | Why |
+|--------|-----|
+| `mc.iboson` | Should carry the exchange boson's PDG code (Z⁰ = 23, W⁺ = 24) but holds a constant sentinel in every file checked. |
+| `mc.flux.*` | 65 fields describing how the parent hadron was produced in the NuMI target and where it decayed. Beam-simulation provenance rather than this interaction; needed for flux systematics, which this archive does not attempt to support. |
+| `mc.fluxwgt.*` | The reweighting factors that go with them. |
+
+**Truth that is genuinely dropped.**
+
+These are not redundant and not reconstruction — they are simulation truth
+that the archive does not currently keep. Listed plainly so the choice is
+visible rather than buried.
+
+| Branch | Why |
+|--------|-----|
+| `stdhep.parent[2]` | Indices of a particle's parents — the decay chain. Real truth; dropped only because no analysis here has needed the genealogy. |
+| `stdhep.child[2]` | Its daughters, the same. |
+| `stdhep.ndethit` | How many digits the particle deposited energy in. Populated (0–489) even though `digihit` itself is empty. |
+| `stdhep.dethit[2]` | The particle's first and last hit in the detector — plane, strip, position and momentum for each. Populated, and the closest thing to per-particle trajectory truth available in these files. |
 
 Whole branch groups that are not used.
 
