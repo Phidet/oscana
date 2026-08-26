@@ -1,39 +1,7 @@
 # MINOS SNTP variables
 
 Reference for the `VariableCollection`s in [`constants.py`](constants.py),
-which name the branches read from MINOS `.sntp.root` files.
-
-## Background
-
-MINOS was a long-baseline neutrino oscillation experiment: a beam made at
-Fermilab (NuMI, "Neutrinos at the Main Injector") crossed 735 km to a
-detector in the Soudan mine. Both its Near and Far detectors are
-steel/scintillator sampling calorimeters — alternating steel plates and
-**planes** of plastic scintillator **strips**. Consecutive planes are
-rotated ±45° relative to each other, giving two stereo views conventionally
-called **U** and **V**. Each view measures one transverse coordinate, so a
-hit's plane number plus its strip number in each view locates it in 3-D.
-Strips are read out at both ends, called **east** and **west** here.
-
-A **snarl** is one readout window — everything the DAQ recorded in a short
-interval, possibly containing more than one interaction. A **digit** is a
-single digitised readout-channel signal; reconstruction groups digits into
-strips, and strips into tracks and showers. The distinction matters below,
-because some truth variables count digits and others count strips.
-
-An **SNTP** file is the standard MINOS analysis ntuple: a ROOT file whose
-`NtpSt` tree holds the branches documented here. **LOON** is the MINOS
-offline software framework that produces them. In simulation, `stdhep` is
-the generator's particle-level record (StdHep/HEPEVT convention) holding
-every particle in the interaction, while the `mc.*` branches summarise that
-interaction event by event.
-
-Meanings come from the LOON source where possible — the ntuple headers
-`NtpMCTruth.h`, `Truth.h`, `NtpMCStdHep.h`, the enum in `PlaneView.h`, and
-the fill code in `NtpMCModule.cxx` — otherwise from a 2003 glossary for
-`NtpSR` (the predecessor tree), `NuEvent.h`, or the observed distributions
-in a Far Detector Monte Carlo file. Anything still unresolved is marked
-**`???`** rather than guessed at.
+which name the branches read from MINOS `.sntp.root` files. Anything still unresolved is marked **`???`**.
 
 ## `HEADER_VARIABLES`
 
@@ -53,7 +21,7 @@ list rather than a dense image. `IMAGE_ALL_VARIABLES` concatenates all four.
 
 | Variable | Meaning |
 |----------|---------|
-| `stp.planeview` | Which stereo view the strip belongs to: `2` = U, `3` = V. (`PlaneView.h` also defines `kX=0, kY=1, kA=4, kB=5, kUnknown=7`, and 8–15 for the veto shield, none of which appear in these strips.) Fixed by `stp.plane` — see [Geometry](#geometry). |
+| `stp.planeview` | Which stereo view the strip belongs to: `2` = U, `3` = V. (`PlaneView.h` also defines `kX=0, kY=1, kA=4, kB=5, kUnknown=7`, and 8–15 for the veto shield, none of which occur here.) Redundant: views alternate U, V, U, V… so it is fixed by `stp.plane`. |
 | `stp.strip` | Strip number within the plane, 0–191. |
 | `stp.plane` | Plane number along the beam axis, 1–485 in a Far Detector file. |
 
@@ -125,7 +93,7 @@ Components are `(px, py, pz)` then energy, all GeV.
 | `mc.y` | Inelasticity y, [0, 1]. The invariant form, not the lab-frame ratio, which ignores Fermi motion. |
 | `mc.q2` | Four-momentum transfer squared. **Negative** here — negate for the usual positive `Q²`. |
 | `mc.w2` | Hadronic invariant mass squared [GeV²]. QE events sit at ≈0.880 = (proton mass)². |
-| `mc.sigma` | Cross section for this interaction. Units unconfirmed — the value is passed through unchanged from NEUGEN, the Fortran event generator MINOS used, whose source is not part of LOON. **`???`** |
+| `mc.sigma` | Cross section for this interaction. Units unconfirmed — the value is passed through unchanged from NEUGEN, the Fortran event generator MINOS used, whose source is not part of LOON, the MINOS offline software. **`???`** |
 | `mc.sigmadiff` | Differential cross section. Same provenance, same open question. Exactly `0` for the inverse-muon-decay events, where `x`/`y` are undefined. **`???`** |
 | `mc.emfrac` | EM fraction of hadronic shower energy, [0, 1]. Pre-FSI like `p4shw`, so it disagrees with a post-FSI computation from `stdhep`. |
 | `mc.ndigu` | Raw digits in the u-view truth-matched to this interaction. Counts *digits*, not reconstructed strips, so it cannot be rebuilt from `stp.*`. |
@@ -150,32 +118,13 @@ the struck target, and everything in the final state.
 a null placeholder never tracked. LOON strips them too (`HepevtModule`'s
 `DropStatus999`). Filter `IstHEP != 999` before particle-level physics.
 
-## Geometry
-
-`stp.z` and `stp.planeview` are both pure functions of `stp.plane` — they
-describe the detector, not the hit. Measured over 14.7 M hits: no plane
-disagrees on either.
-
-The Far Detector is built as two **supermodules** — separate steel/
-scintillator stacks with a ~1.2 m air gap between them.
-
-`z` is therefore a 484-entry lookup rather than a formula: near-linear
-within each supermodule (pitch 59.490 mm for planes 1–248, 59.430 mm for
-250–485) but with the gap in between, which a single straight-line fit
-misses by 54.7 cm. `planeview` alternates U, V, U, V… with plane number,
-the sense flipping between supermodules because plane 249 is absent from
-the numbering while the physical alternation carries straight on.
-
-Both are Far-Detector measurements. The Near Detector differs in plane
-count, coverage and view arrangement — re-derive before applying there.
-
 ## Not included
 
 Fields inside branches that are otherwise read.
 
 | Branch | Why |
 |--------|-----|
-| `stp.z` | Fixed per plane — see [Geometry](#geometry). |
+| `stp.z` | One fixed z per plane, so a lookup on `stp.plane` — though not a linear formula, since the Far Detector has a gap between its two supermodules. |
 | `stp.ph0.raw` | Earlier calibration stage than `pe` (ADC counts), east end. |
 | `stp.ph1.raw` | Same, west end. |
 | `stp.ph0.siglin` | Nonlinearity-corrected stage, before `pe`, east end. |
@@ -210,7 +159,7 @@ Fields inside branches that are otherwise read.
 | `stdhep.ndethit` | Number of digits this particle deposited in. |
 | `stdhep.dethit[2]` | Which digits those were. |
 
-Whole branch groups, none of them read.
+Whole branch groups that are not used.
 
 | Group | Why |
 |-------|-----|
