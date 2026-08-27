@@ -14,14 +14,11 @@ which name the branches read from MINOS `.sntp.root` files. Anything still unres
 
 ## `IMAGE_*` — digitised strip hits
 
-Jagged: one entry per hit, per event. Occupancy is ~0.1%, hence a sparse
-list rather than a dense image. `IMAGE_ALL_VARIABLES` concatenates all four.
-
 ### `IMAGE_BASIC_VARIABLES`
 
 | Variable | Meaning |
 |----------|---------|
-| `stp.planeview` | Which stereo view the strip belongs to: `2` = U, `3` = V. (`PlaneView.h` also defines `kX=0, kY=1, kA=4, kB=5, kUnknown=7`, and 8–15 for the veto shield, none of which occur here.) Redundant: views alternate U, V, U, V… so it is fixed by `stp.plane`. |
+| `stp.planeview` | Which stereo view the strip belongs to: `2` = U, `3` = V. |
 | `stp.strip` | Strip number within the plane, 0–191. |
 | `stp.plane` | Plane number along the beam axis, 1–485 in a Far Detector file. |
 
@@ -39,19 +36,12 @@ list rather than a dense image. `IMAGE_ALL_VARIABLES` concatenates all four.
 | `stp.ph0.sigcor` | Attenuation-normalised strip response, east end. |
 | `stp.ph1.sigcor` | Same, west end. |
 
-Not a rescaling of `pe`: the ratio spans 20–1901 over ~3.9 M distinct values
-in one file, i.e. a per-strip, per-hit calibration.
-
 ### `IMAGE_TIME_VARIABLES`
 
 | Variable | Meaning |
 |----------|---------|
 | `stp.time0` | Charge-weighted mean hit time, east end [s], relative to the trigger. `-999999` means that end saw no signal. |
 | `stp.time1` | Same, west end. |
-
-The sentinel fires on ~23% of hits per end but never on both at once, so
-every hit has a usable time from at least one end. Mask it before averaging
-or differencing.
 
 ## `EVENT_VERTEX_VARIABLES`
 
@@ -61,8 +51,7 @@ or differencing.
 | `evt.vtx.y` | Reconstructed event vertex y [m]. |
 | `evt.vtx.z` | Reconstructed event vertex z [m]. |
 
-Reconstruction output, unlike everything else here. Not the truth vertex
-(`mc.vtxx/y/z`, not read — see [Not included](#not-included)).
+Reconstruction output, unlike everything else here (see [Not included](#not-included)).
 
 ## `MC_4MOMENTUM_VARIABLES`
 
@@ -70,8 +59,8 @@ Components are `(px, py, pz)` then energy, all GeV.
 
 | Variable | Meaning |
 |----------|---------|
-| `mc.p4neunoosc[4]` | Neutrino 4-momentum under the unoscillated hypothesis. Matches no `stdhep` row — a hypothetical never generated as a particle. |
-| `mc.p4mu1[4]` | Primary muon 4-momentum. Duplicates a `stdhep` lepton row, but with the energy component's sign flipped for the matter lepton (`NuEvent.h`: "not proper p4"). |
+| `mc.p4neunoosc[4]` | Neutrino 4-momentum under the unoscillated hypothesis. |
+| `mc.p4mu1[4]` | Primary muon 4-momentum. Duplicates a `stdhep` lepton row, but with the energy component's sign flipped for the matter lepton. |
 | `mc.p4shw[4]` | Final-state hadronic system. Not the sum of the `stdhep` hadrons: it is evaluated before final-state interactions (FSI) — the rescattering of products inside the struck nucleus — whereas `stdhep` records the particles that emerge after them. |
 
 ## `MC_INTERACTION_VARIABLES`
@@ -88,17 +77,17 @@ Components are `(px, py, pz)` then energy, all GeV.
 | `mc.itg` | PDG code of the struck target: `2212`/`2112` nucleons, a large nucleus code for coherent events, `11` for inverse muon decay. |
 | `mc.iresonance` | Channel: `1001` QE, `1002` resonance, `1003` DIS, `1004` coherent pion, `1005` inverse muon decay. |
 | `mc.istruckq` | PDG id of the struck quark: `0` none (non-DIS), `1` d, `2` u. |
-| `mc.iflags` | Hadronisation model, **not** a bitmask: `0` non-DIS, `1` old KNO, `2` modified KNO, `3` charm, `11`/`12`/`13` JETSET string/cluster/other. |
-| `mc.x` | Bjorken x, [0, 1]. |
-| `mc.y` | Inelasticity y, [0, 1]. The invariant form, not the lab-frame ratio, which ignores Fermi motion. |
-| `mc.q2` | Four-momentum transfer squared. **Negative** here — negate for the usual positive `Q²`. |
-| `mc.w2` | Hadronic invariant mass squared [GeV²]. QE events sit at ≈0.880 = (proton mass)². |
-| `mc.sigma` | Cross section for this interaction. Units unconfirmed — the value is passed through unchanged from NEUGEN, the Fortran event generator MINOS used, whose source is not part of LOON, the MINOS offline software. **`???`** |
-| `mc.sigmadiff` | Differential cross section. Same provenance, same open question. Exactly `0` for the inverse-muon-decay events, where `x`/`y` are undefined. **`???`** |
-| `mc.emfrac` | EM fraction of hadronic shower energy, [0, 1]. Pre-FSI like `p4shw`, so it disagrees with a post-FSI computation from `stdhep`. |
-| `mc.ndigu` | Raw digits in the u-view truth-matched to this interaction. Counts *digits*, not reconstructed strips, so it cannot be rebuilt from `stp.*`. |
+| `mc.iflags` | Hadronisation model: `0` non-DIS, `1` old KNO, `2` modified KNO, `3` charm, `11`/`12`/`13` JETSET string/cluster/other. |
+| `mc.x` | Bjorken x. |
+| `mc.y` | Inelasticity y. The invariant form, not the lab-frame ratio, which ignores Fermi motion. |
+| `mc.q2` | Four-momentum transfer squared. |
+| `mc.w2` | Hadronic invariant mass squared [GeV²]. |
+| `mc.sigma` | Cross section for this interaction. Units unconfirmed — the value is passed through unchanged from NEUGEN. **`???`** |
+| `mc.sigmadiff` | Differential cross section. Same issue as above. **`???`** |
+| `mc.emfrac` | EM fraction of hadronic shower energy. Pre-FSI. |
+| `mc.ndigu` | Raw digits in the u-view truth-matched to this interaction. |
 | `mc.ndigv` | Same, v-view. A digit touching both views is counted in u only. |
-| `mc.tphu` | Summed pulse height, u-view — **raw ADC, pedestal-subtracted**, over the same digits as `ndigu`. Hence the scale far above `pe`. |
+| `mc.tphu` | Summed pulse height, u-view — **raw ADC, pedestal-subtracted**, over the same digits as `ndigu`. |
 | `mc.tphv` | Same, v-view. |
 
 ## `MC_PARTICLE_VARIABLES`
@@ -115,8 +104,7 @@ the struck target, and everything in the final state.
 | `stdhep.vtx[4]` | Production 4-position: `(x, y, z)` in metres, then time in seconds. |
 
 **Every event carries one `IstHEP == 999`, `IdHEP == 0` row** — a *rootino*,
-a null placeholder never tracked. LOON strips them too (`HepevtModule`'s
-`DropStatus999`). Filter `IstHEP != 999` before particle-level physics.
+a null placeholder never tracked.
 
 ## `MC_STRIP_TRUTH_VARIABLES`
 
@@ -134,9 +122,6 @@ lines up row-for-row with the hit variables.
 
 ## `DETECTOR_STATE_VARIABLES`
 
-Conditions rather than event data — constant within a file, but needed to
-interpret it.
-
 | Variable | Meaning |
 |----------|---------|
 | `calstatus.gevpermip` | Calibration constant converting MIP-equivalent signal to GeV. Needed to turn the `pe` values into energy. |
@@ -148,11 +133,7 @@ interpret it.
 
 ## `DAQ_CONTEXT_VARIABLES`
 
-Beam, trigger and absolute-timing context for the snarl.
-
-**Unset (`-1`) throughout the Monte Carlo files checked** — spill and
-trigger information only exists for real data. Requesting these from an MC
-file yields sentinels rather than an error.
+Beam, trigger and absolute-timing context for the snarl. Unset (`-1`) for Monte Carlo.
 
 | Variable | Meaning |
 |----------|---------|
@@ -171,9 +152,7 @@ file yields sentinels rather than an error.
 
 ## `VETO_SHIELD_VARIABLES`
 
-Raw hits in the veto shield — a separate scintillator subsystem around the
-Far Detector used to tag cosmic-ray muons. Detector data, not
-reconstruction. Sparse: about 3% of snarls have any.
+Raw hits in the veto shield.
 
 | Variable | Meaning |
 |----------|---------|
@@ -196,15 +175,6 @@ correction. `IMAGE_PE_VARIABLES` is the calibrated product derived from it.
 | `stp.ph0.raw` | Raw ADC, east end. |
 | `stp.ph1.raw` | Raw ADC, west end. |
 
-Worth keeping *alongside* `pe` rather than instead of it. The conversion is
-per-strip — the `pe/raw` ratio takes ~10,000 distinct values in one file —
-so `pe` cannot be inverted on its own, and an archive holding only `pe` is
-locked into MINOS's calibration for good. With both present the factor is
-recoverable from the data itself.
-
-Deliberately **not** part of `IMAGE_ALL_VARIABLES`: adding it there would
-enlarge every existing caller's read without their asking.
-
 ## `MC_PARTICLE_LINEAGE_VARIABLES`
 
 The decay chain behind each `stdhep` row.
@@ -215,17 +185,10 @@ The decay chain behind each `stdhep` row.
 | `stdhep.child[2]` | Indices of its daughters. |
 | `stdhep.ndethit` | How many digits it deposited energy in. |
 
-Not reconstructable from the particle kinematics: a shared production
-vertex identifies siblings at best, and chains such as π → μ → e span
-vertices. This is what separates a primary lepton from a decay product, and
-it is the only way to see final-state interactions in the record.
-
 ## `MC_FLUX_VARIABLES`
 
 The gnumi beam-simulation record: where this neutrino came from, from the
-primary proton through to its weight at each detector. 65 fields, grouped
-below. None of it can be regenerated without rerunning the NuMI beam
-simulation.
+primary proton through to its weight at each detector.
 
 | Fields | What they hold |
 |--------|----------------|
@@ -240,12 +203,6 @@ simulation.
 | `beamx…beampz`, `xpoint`, `ypoint`, `zpoint` | The primary proton beam, and the ray-traced point used for the weights. |
 | `nimpwt`, `mc.fluxwgt.weight`, `weighterr`, `version` | Importance weight, then the overall flux weight with its uncertainty and the version that produced it. |
 
-Sanity checks against a real file: `beampz` peaks at 120 GeV, the Main
-Injector energy; decay vertices reach ~723 m, consistent with the 675 m
-decay pipe; `tgen` runs 2–6; and far-detector weights sit about five orders
-of magnitude below near-detector ones, as the solid angle at 735 km
-requires.
-
 ## Not included
 
 Fields inside branches that are otherwise read. Grouped by why.
@@ -254,12 +211,12 @@ Fields inside branches that are otherwise read. Grouped by why.
 
 | Branch | Why |
 |--------|-----|
-| `stp.z` | One fixed z per plane, so a lookup on `stp.plane`. Not a linear formula — the Far Detector has a gap between its two supermodules. |
+| `stp.z` | One fixed z per plane, so a lookup on `stp.plane`. |
 | `stp.tpos` | Transverse position, fixed by `plane` and `strip` together. |
 | `stp.ndigit` | Only ever 1 or 2: how many ends of the strip fired. The same information as which of `time0`/`time1` holds the `-999999` sentinel. |
 | `mc.inu` | Duplicates the PDG code on the `stdhep` initial-state neutrino row (`IstHEP == 0`). |
 | `mc.a` | The target nucleus's mass number, encoded in the PDG code of the `stdhep` nucleus row. Hydrogen when there is no such row. |
-| `mc.z` | Its atomic number, from the same code. Not Bjorken z, and not a position. |
+| `mc.z` | Its atomic number, from the same code. |
 | `mc.vtxx` | Duplicates `vtx[0]` on the `stdhep` neutrino row. |
 | `mc.vtxy` | Duplicates its `vtx[1]`. |
 | `mc.vtxz` | Duplicates its `vtx[2]`. |
@@ -308,7 +265,7 @@ file that breaks one is refused rather than silently stripped.
 
 | Branch | Why |
 |--------|-----|
-| `stdhep.dethit[2]` | The particle's first and last hit — plane, strip, position and momentum for each, and the closest thing to per-particle trajectory truth in these files. It is populated. It is left out because uproot reads it as `AsObjects(Model_NtpMCStdHepHit)`, a C++ struct array rather than numbers: `ak.to_numpy` raises on it, so neither the loader nor the HDF5 writer can take it without struct unpacking that neither does. A real loss, recorded rather than dressed up as redundancy. |
+| `stdhep.dethit[2]` | The particle's first and last hit — plane, strip, position and momentum for each. It is left out because uproot reads it as a C++ struct array. Would need work to convert to numpy/python. |
 
 Whole branch groups that are not used.
 

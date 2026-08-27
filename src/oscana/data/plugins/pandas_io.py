@@ -222,8 +222,6 @@ def _v1_naive_loader_h5(
                 f"Extracting variable '{column_name}' from '{file}'..."
             )
 
-            # A jagged column is a group of two datasets; a flat one is a
-            # single dataset. `_read_h5_column` handles both.
             data_dict[column_name] = _read_h5_column(
                 data_branch[column_name]
             )
@@ -418,13 +416,6 @@ def _write_h5_column(
     Jagged columns are stored as a sub-group of two ordinary datasets --
     `values` (all elements concatenated) and `offsets` (where each event's
     slice starts) -- rather than as one variable-length dataset.
-
-    This is not a stylistic choice. HDF5 keeps variable-length data in the
-    global heap and applies dataset filters only to the pointers, so a vlen
-    dataset is effectively *uncompressed* no matter what codec is asked for
-    (measured: gzip-9 on vlen shrank a test file by 2%; the same data and
-    codec in this layout shrank it by 39%). Two fixed-width datasets
-    compress normally.
 
     Parameters
     ----------

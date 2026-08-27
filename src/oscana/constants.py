@@ -104,9 +104,7 @@ SNTP_VR_EVT_UTC: Final[str] = (
 
 # ====================== [ SNTP Variable Collections  ] ====================== #
 
-# See README.md (this directory) for what each variable means, which are
-# left out and why, and which `mc.*` fields duplicate the particle table.
-
+# See README.md (in this directory) for variable explanations.
 
 class VariableCollection(list):
     """\
@@ -239,14 +237,14 @@ HEADER_VARIABLES: Final[VariableCollection] = VariableCollection(
         "fRun",  # Run number
         "fSubRun",  # Subrun number
         "fSnarl",  # Snarl number
-        "fEvent",  # Event number (constant -1 in files checked so far)
+        "fEvent",  # Event number
     ],
     root=SNTP_BR_STD,
 )
 
 IMAGE_BASIC_VARIABLES: Final[VariableCollection] = VariableCollection(
     variables=[
-        "stp.planeview",  # Plane view: 2 = U, 3 = V (PlaneView.h)
+        "stp.planeview",  # Plane view: 2 = U, 3 = V
         "stp.strip",  # Strip number
         "stp.plane",  # Plane number
     ],
@@ -296,7 +294,7 @@ EVENT_VERTEX_VARIABLES: Final[VariableCollection] = VariableCollection(
 MC_4MOMENTUM_VARIABLES: Final[VariableCollection] = VariableCollection(
     variables=[
         "mc.p4neunoosc[4]",  # Neutrino 4-momentum
-        "mc.p4mu1[4]",  # Primary muon 4-momentum (note: energy sign quirk)
+        "mc.p4mu1[4]",  # Primary muon 4-momentum
         "mc.p4shw[4]",  # Hadronic shower 4-momentum
     ],
     root=SNTP_BR_STD,
@@ -328,7 +326,7 @@ MC_TRUTH_EVENT_VARIABLES: Final[VariableCollection] = VariableCollection(
         "mc.itg",  # PDG code of the struck target
         "mc.iresonance",  # Interaction channel (QE / RES / DIS / CPP / IMD)
         "mc.istruckq",  # PDG id of the struck quark (0 none, 1 d, 2 u)
-        "mc.iflags",  # Hadronisation model, not a bitmask -- see README
+        "mc.iflags",  # Hadronisation model -- see README
         "mc.x",  # Bjorken x
         "mc.y",  # Inelasticity y
         "mc.q2",  # Four-momentum transfer squared (negative / spacelike)
@@ -336,17 +334,16 @@ MC_TRUTH_EVENT_VARIABLES: Final[VariableCollection] = VariableCollection(
         "mc.sigma",  # Cross section (units unconfirmed)
         "mc.sigmadiff",  # Differential cross section (formula unconfirmed)
         "mc.emfrac",  # EM fraction of the hadronic shower energy
-        "mc.ndigu",  # Truth-matched raw digits, u-view (not reco strips)
-        "mc.ndigv",  # Truth-matched raw digits, v-view (not reco strips)
-        "mc.tphu",  # Summed pulse height, u-view [raw ADC, pedestal-sub]
-        "mc.tphv",  # Summed pulse height, v-view [raw ADC, pedestal-sub]
+        "mc.ndigu",  # Truth-matched raw digits, u-view
+        "mc.ndigv",  # Truth-matched raw digits, v-view
+        "mc.tphu",  # Summed pulse height, u-view [raw ADC, pedestal-subtracted]
+        "mc.tphv",  # Summed pulse height, v-view [raw ADC, pedestal-subtracted]
     ],
     root=SNTP_BR_STD,
 )
 
 # Truth for each strip in `IMAGE_*`: which simulated particles put energy
-# there and in what proportion. Truth information rather than reconstruction
-# output, and exactly parallel to the hits -- one record per strip.
+# there and in what proportion.
 MC_STRIP_TRUTH_VARIABLES: Final[VariableCollection] = VariableCollection(
     variables=[
         "thstp.neumc",  # Index of the interaction (mc record) responsible
@@ -374,10 +371,7 @@ DETECTOR_STATE_VARIABLES: Final[VariableCollection] = VariableCollection(
 )
 
 # Beam, trigger and absolute timing context for the snarl.
-#
-# Note: unset (-1) throughout the Monte Carlo files checked -- spill and
-# trigger information only exists for real data. Requesting these from an
-# MC file gives sentinels, not an error.
+# Note: unset (-1) for Monte Carlo files
 DAQ_CONTEXT_VARIABLES: Final[VariableCollection] = VariableCollection(
     variables=[
         "dataquality.spillstatus",  # Beam spill status
@@ -396,9 +390,7 @@ DAQ_CONTEXT_VARIABLES: Final[VariableCollection] = VariableCollection(
     root=SNTP_BR_STD,
 )
 
-# Raw hits in the veto shield -- a separate scintillator subsystem above and
-# around the Far Detector, used to tag cosmic-ray muons. Detector data, not
-# reconstruction. Sparse: most snarls have none.
+# Raw hits in the veto shield.
 VETO_SHIELD_VARIABLES: Final[VariableCollection] = VariableCollection(
     variables=[
         "vetostp.pln",  # Shield plane
@@ -415,14 +407,6 @@ VETO_SHIELD_VARIABLES: Final[VariableCollection] = VariableCollection(
 
 # Uncalibrated pulse height -- what the electronics actually recorded, as
 # opposed to `IMAGE_PE_VARIABLES`, which is MINOS's calibrated product.
-#
-# Deliberately NOT part of `IMAGE_ALL_VARIABLES`: adding it there would
-# silently enlarge every existing caller's read. Ask for it explicitly.
-#
-# Worth keeping alongside `pe` rather than instead of it. The conversion is
-# per-strip, so `pe` cannot be inverted -- but with both present the
-# calibration factor is recoverable from the data itself, which is what
-# makes re-calibration possible at all.
 IMAGE_RAW_VARIABLES: Final[VariableCollection] = VariableCollection(
     variables=[
         "stp.ph0.raw",  # Raw ADC, east end
@@ -432,11 +416,6 @@ IMAGE_RAW_VARIABLES: Final[VariableCollection] = VariableCollection(
 )
 
 # Particle genealogy: the decay chain behind each `stdhep` row.
-#
-# Not reconstructable from the particle kinematics alone -- a shared
-# production vertex identifies siblings at best, and chains such as
-# pi -> mu -> e span vertices. Needed to tell a primary lepton from a decay
-# product, and to study final-state interactions at all.
 MC_PARTICLE_LINEAGE_VARIABLES: Final[VariableCollection] = VariableCollection(
     variables=[
         "stdhep.parent[2]",  # Indices of the particle's parents
@@ -447,11 +426,7 @@ MC_PARTICLE_LINEAGE_VARIABLES: Final[VariableCollection] = VariableCollection(
 )
 
 # The gnumi beam-simulation record: where this neutrino came from, from the
-# primary proton through to its weight at each detector. Cannot be
-# regenerated without rerunning the NuMI beam simulation.
-#
-# See NtpMCFluxInfo.h in the MINOS offline source, which points in turn at
-# the gnumi ntuple documentation.
+# primary proton through to its weight at each detector.
 MC_FLUX_VARIABLES: Final[VariableCollection] = VariableCollection(
     variables=[
         # Which gnumi beam-simulation event this neutrino came from.
